@@ -244,8 +244,8 @@ export const orgRouter = createRouter({
             }).$returningId();
             programId = pid;
             const phaseName: Record<string, string> = {
-              prestarter: "Prestarter", starter: "Starter", grower1: "Grower I",
-              grower2: "Grower II", finisher1: "Finisher I", finisher2: "Finisher II",
+              prestarter: "Prestarter", starter: "Starter 2", starter1: "Starter 1", starter2: "Starter 2",
+              grower1: "Grower I", grower2: "Grower II", finisher1: "Finisher I", finisher2: "Finisher II",
             };
             for (const n of norms) {
               await db.insert(s.feedProgramStages).values({

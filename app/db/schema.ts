@@ -233,6 +233,9 @@ export const litter = mysqlTable("litter", {
   thicknessCm: decimal("thicknessCm", { precision: 4, scale: 1 }).notNull(),
   moisturePct: decimal("moisturePct", { precision: 5, scale: 2 }),
   cost: decimal("cost", { precision: 10, scale: 2 }).notNull().default("0"),
+  /* Ścielenie w belach (obchód) — liczba bel i rozmiar beli */
+  balesCount: int("balesCount"),
+  baleKg: decimal("baleKg", { precision: 8, scale: 1 }),
   laidAt: date("laidAt", { mode: "string" }).notNull(),
   ...base,
 });

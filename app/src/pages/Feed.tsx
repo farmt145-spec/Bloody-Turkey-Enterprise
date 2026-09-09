@@ -16,9 +16,10 @@ const cardCls = "rounded-xl border border-zinc-800 bg-zinc-900/60 backdrop-blur"
 const headCls = "border-b border-zinc-800 px-4 py-3 text-sm font-semibold uppercase tracking-wider text-zinc-400";
 
 const AGE_GROUPS = [
-  { key: "prestarter", label: "Prestarter 0–14 d" },
-  { key: "starter", label: "Starter 15–28 d" },
-  { key: "grower1", label: "Grower I 29–56 d" },
+  { key: "prestarter", label: "Prestarter 0–7 d" },
+  { key: "starter1", label: "Starter 1 · 8–14 d" },
+  { key: "starter2", label: "Starter 2 · 15–21 d" },
+  { key: "grower1", label: "Grower I 22–56 d" },
   { key: "grower2", label: "Grower II 57–84 d" },
   { key: "finisher1", label: "Finisher I 85–112 d" },
   { key: "finisher2", label: "Finisher II 113+ d" },

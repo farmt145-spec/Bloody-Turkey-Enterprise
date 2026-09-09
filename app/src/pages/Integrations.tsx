@@ -118,6 +118,16 @@ function IngestDocs() {
   return (
     <div className={`${cardCls} p-5`}>
       <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-zinc-400">Jak wpiąć urządzenie — gotowe szablony</h2>
+
+      <div className="mb-3 rounded-lg border border-emerald-800/50 bg-emerald-950/30 p-3">
+        <div className="mb-1.5 flex items-center gap-2 text-sm font-medium text-emerald-300"><CheckCircle2 className="h-4 w-4" /> Krok 1 — test połączenia (zanim cokolwiek wyślesz)</div>
+        <pre className="overflow-x-auto rounded bg-zinc-900 p-2 text-[11px] leading-relaxed text-zinc-300">
+{`curl ${base}/api/v1/ping -H "X-API-Key: TWÓJ_KLUCZ"
+# Odpowiedź OK:  {"ok":true,"serverTime":"…","keyLabel":"…"}
+# Zły klucz:     {"ok":false,"error":"Nieprawidłowy lub nieaktywny klucz API"}`}
+        </pre>
+      </div>
+
       <div className="grid gap-3 lg:grid-cols-2">
         {examples.map((e) => (
           <div key={e.name} className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
@@ -131,10 +141,26 @@ function IngestDocs() {
           </div>
         ))}
       </div>
-      <p className="mt-3 flex items-start gap-2 text-xs text-zinc-500">
-        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" />
-        Dane wpisane przez API trafiają wprost do modułów: klimat → IoT Live, zużycie → FCR/Analytics, padnięcia → Zdrowie, ważenia → Produkcja. Zalecamy osobny klucz dla każdego urządzenia — łatwo go wyłączyć bez wpływu na resztę.
-      </p>
+
+      <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
+        <div className="mb-1.5 text-sm font-medium">Paczka odczytów naraz (maks. 200) — oszczędność połączeń z kontrolera</div>
+        <pre className="overflow-x-auto rounded bg-zinc-900 p-2 text-[11px] leading-relaxed text-zinc-300">
+{`curl -X POST ${base}/api/v1/ingest \\
+  -H "Content-Type: application/json" -H "X-API-Key: TWÓJ_KLUCZ" \\
+  -d '{"type":"climate","readings":[{"houseId":1,"tempC":21.5},{"houseId":2,"tempC":22.1}]}'`}
+        </pre>
+      </div>
+
+      <div className="mt-3 space-y-1.5 text-xs text-zinc-500">
+        <p className="flex items-start gap-2">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" />
+          Dane wpisane przez API trafiają wprost do modułów: klimat → IoT Live, zużycie → FCR/Analytics, padnięcia → Zdrowie, ważenia → Produkcja. Zalecamy osobny klucz dla każdego urządzenia — łatwo go wyłączyć bez wpływu na resztę.
+        </p>
+        <p className="flex items-start gap-2">
+          <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400" />
+          Serwer waliduje zakresy (np. temperatura −40…80 °C, wilgotność 0–100%) i zwraca czytelny błąd JSON zamiast przerywać — błędny odczyt w paczce nie blokuje pozostałych. Każda odpowiedź ma pole <code className="rounded bg-zinc-800 px-1">ok</code> oraz <code className="rounded bg-zinc-800 px-1">count</code> zapisanych odczytów.
+        </p>
+      </div>
     </div>
   );
 }

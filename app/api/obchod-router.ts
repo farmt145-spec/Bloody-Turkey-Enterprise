@@ -38,8 +38,32 @@ export const obchodRouter = createRouter({
       const normRows = lineIds.length
         ? await db.select().from(s.geneticLineNorms).where(inArray(s.geneticLineNorms.geneticLineId, lineIds))
         : [];
+      // ścielenie danego dnia — per kurnik
+      const houseIds = [...new Set(batchRows.map((b) => b.houseId))];
+      const litterRows = houseIds.length
+        ? await db.select().from(s.litter).where(and(inArray(s.litter.houseId, houseIds), eq(s.litter.laidAt, input.day)))
+        : [];
+      const litterByHouse = new Map<number, { material: string; balesCount: number | null; baleKg: number | null; cost: number }>();
+      for (const l of litterRows) {
+        const cur = litterByHouse.get(l.houseId);
+        const bales = (cur?.balesCount ?? 0) + (l.balesCount ?? 0);
+        const kg = (cur?.balesCount ?? 0) * (cur?.baleKg ?? 0) + (l.balesCount ?? 0) * num(l.baleKg);
+        litterByHouse.set(l.houseId, {
+          material: l.material,
+          balesCount: l.balesCount != null ? bales : cur?.balesCount ?? null,
+          baleKg: bales > 0 ? Math.round((kg / bales) * 10) / 10 : null,
+          cost: (cur?.cost ?? 0) + num(l.cost),
+        });
+      }
       return {
         day: input.day,
+        houses: batchRows.length
+          ? [...new Map(batchRows.map((b) => {
+              const h = houseOf(b.houseId)!;
+              return [b.houseId, { houseId: b.houseId, name: h?.name ?? "?" }];
+            })).values()]
+          : [],
+        litter: Object.fromEntries(litterByHouse),
         rows: batchRows.map((b) => {
           const log = logs.find((l) => l.batchId === b.id) ?? null;
           const dayAge = Math.max(0, Math.round((new Date(input.day).getTime() - new Date(b.startDate).getTime()) / 86400000));
@@ -144,8 +168,8 @@ export const obchodRouter = createRouter({
             companyId: cid, name: `Program — ${line.name}`, sex: input.sex,
           }).$returningId();
           const phaseName: Record<string, string> = {
-            prestarter: "Prestarter", starter: "Starter", grower1: "Grower I",
-            grower2: "Grower II", finisher1: "Finisher I", finisher2: "Finisher II",
+            prestarter: "Prestarter", starter: "Starter 2", starter1: "Starter 1", starter2: "Starter 2",
+            grower1: "Grower I", grower2: "Grower II", finisher1: "Finisher I", finisher2: "Finisher II",
           };
           for (const n of norms) {
             await db.insert(s.feedProgramStages).values({
@@ -172,6 +196,14 @@ export const obchodRouter = createRouter({
         tempC: z.number().min(-30).max(60).optional(),
         humidityPct: z.number().min(0).max(100).optional(),
       })).min(1),
+      /* Ścielenie — opcjonalne wpisy per kurnik (bele ściółki) */
+      litter: z.array(z.object({
+        houseId: z.number(),
+        material: z.string().min(1).max(128),
+        balesCount: z.number().int().min(1).max(100000),
+        baleKg: z.number().min(0.1).max(2000),
+        cost: z.number().min(0).optional(),
+      })).optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const allowed = new Set(await scopedBatchIds(ctx));
@@ -215,6 +247,31 @@ export const obchodRouter = createRouter({
         }
         saved++;
       }
-      return { ok: true, saved };
+      // ścielenie — wpisy bel do tabeli litter (koszt trafia też do costs danego stada)
+      let litterSaved = 0;
+      if (input.litter?.length) {
+        const allowedHouses = new Set(await scopedHouseIds(ctx));
+        const batchByHouse = new Map<number, number>();
+        const batchRows = await db.select().from(s.batches)
+          .where(and(inArray(s.batches.id, [...allowed]), eq(s.batches.status, "active")));
+        for (const b of batchRows) if (!batchByHouse.has(b.houseId)) batchByHouse.set(b.houseId, b.id);
+        for (const l of input.litter) {
+          if (!allowedHouses.has(l.houseId)) continue;
+          await db.insert(s.litter).values({
+            houseId: l.houseId, material: l.material, thicknessCm: "0",
+            balesCount: l.balesCount, baleKg: String(l.baleKg),
+            cost: String(l.cost ?? 0), laidAt: input.day,
+          });
+          if (l.cost && l.cost > 0) {
+            const bid = batchByHouse.get(l.houseId);
+            if (bid) await db.insert(s.costs).values({
+              batchId: bid, category: "litter", amount: String(l.cost), currency: "PLN",
+              day: input.day, note: `Ścielenie: ${l.balesCount} bel × ${l.baleKg} kg (${l.material})`,
+            });
+          }
+          litterSaved++;
+        }
+      }
+      return { ok: true, saved, litterSaved };
     }),
 });

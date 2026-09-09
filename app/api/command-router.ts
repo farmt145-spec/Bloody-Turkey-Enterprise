@@ -294,12 +294,15 @@ export const commandRouter = createRouter({
     for (const h of houses.slice(0, 24)) {
       const [c] = await db.select().from(s.climateLogs).where(eq(s.climateLogs.houseId, h.id)).orderBy(desc(s.climateLogs.id)).limit(1);
       const silo = silos.find((x) => x.farmId === h.farmId);
+      const ts = c?.ts ? new Date(c.ts) : null;
+      const minutesSince = ts ? Math.max(0, Math.round((Date.now() - ts.getTime()) / 60000)) : null;
+      const linkStatus = minutesSince == null ? "offline" : minutesSince <= 15 ? "online" : minutesSince <= 120 ? "stale" : "offline";
       result.push({
         houseId: h.id, name: h.name, farm: farmMap.get(h.farmId) ?? "—",
         tempC: c ? num(c.tempC) : null, humidityPct: c ? num(c.humidityPct) : null,
         ammoniaPpm: c ? num(c.ammoniaPpm) : null, co2Ppm: c?.co2Ppm ?? null,
         ventilationPct: c?.ventilationPct ?? null,
-        ts: c?.ts ?? null,
+        ts: c?.ts ?? null, minutesSince, linkStatus, source: c?.source ?? null,
         siloPct: silo && num(silo.capacityTons) > 0 ? (num(silo.currentTons) / num(silo.capacityTons)) * 100 : null,
       });
     }

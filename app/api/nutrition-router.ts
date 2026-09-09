@@ -43,16 +43,17 @@ function profileOf(items: { ing: s.FeedIngredient; percent: number }[]) {
 
 /* Wyniki produkcyjne przewidywane z profilu — model kalibrowany dla indyków */
 export const AGE_GROUPS = {
-  prestarter: { label: "Prestarter (0–14 d)", protein: 28, energy: 2850, lysine: 1.7, baseAdg: 45, days: 14 },
-  starter: { label: "Starter (15–28 d)", protein: 26, energy: 2900, lysine: 1.6, baseAdg: 75, days: 28 },
-  grower1: { label: "Grower I (29–56 d)", protein: 23, energy: 3000, lysine: 1.35, baseAdg: 105, days: 56 },
-  grower2: { label: "Grower II (57–84 d)", protein: 20, energy: 3100, lysine: 1.1, baseAdg: 130, days: 84 },
-  finisher1: { label: "Finisher I (85–112 d)", protein: 18, energy: 3200, lysine: 1.0, baseAdg: 150, days: 112 },
-  finisher2: { label: "Finisher II (113+ d)", protein: 16.5, energy: 3250, lysine: 0.9, baseAdg: 155, days: 140 },
+  prestarter: { label: "Prestarter (0–7 d)", protein: 28.5, energy: 2820, lysine: 1.75, baseAdg: 35, days: 7 },
+  starter1: { label: "Starter 1 (8–14 d)", protein: 27.5, energy: 2880, lysine: 1.65, baseAdg: 55, days: 14 },
+  starter2: { label: "Starter 2 (15–21 d)", protein: 26, energy: 2900, lysine: 1.55, baseAdg: 85, days: 21 },
+  grower1: { label: "Grower I (22–56 d)", protein: 23, energy: 3000, lysine: 1.32, baseAdg: 115, days: 56 },
+  grower2: { label: "Grower II (57–84 d)", protein: 20.5, energy: 3100, lysine: 1.12, baseAdg: 135, days: 84 },
+  finisher1: { label: "Finisher I (85–112 d)", protein: 18, energy: 3200, lysine: 0.95, baseAdg: 150, days: 112 },
+  finisher2: { label: "Finisher II (113+ d)", protein: 16.5, energy: 3250, lysine: 0.8, baseAdg: 155, days: 140 },
 } as const;
 export type AgeGroupKey = keyof typeof AGE_GROUPS;
 // aliasy wstecznej zgodności
-const ALIAS: Record<string, AgeGroupKey> = { grower: "grower2", finisher: "finisher1" };
+const ALIAS: Record<string, AgeGroupKey> = { starter: "starter2", grower: "grower2", finisher: "finisher1" };
 
 function productionFromProfile(p: ReturnType<typeof profileOf>, ageGroupIn: AgeGroupKey | string) {
   const ageGroup = (ALIAS[ageGroupIn] ?? ageGroupIn) as AgeGroupKey;
@@ -77,7 +78,7 @@ function productionFromProfile(p: ReturnType<typeof profileOf>, ageGroupIn: AgeG
 
 const mixInput = z.object({
   items: z.array(z.object({ ingredientId: z.number(), percent: z.number().min(0).max(100) })).min(1),
-  ageGroup: z.enum(["prestarter", "starter", "grower1", "grower2", "finisher1", "finisher2", "grower", "finisher"]).default("finisher1"),
+  ageGroup: z.enum(["prestarter", "starter1", "starter2", "grower1", "grower2", "finisher1", "finisher2", "starter", "grower", "finisher"]).default("finisher1"),
 });
 
 async function loadIngredients(db: ReturnType<typeof getDb>, mix: Mix) {

@@ -220,8 +220,15 @@ export default function CommandCenter() {
           {(iot.data ?? []).map((h) => (
             <div key={h.houseId} className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-3">
               <div className="mb-2 flex items-center justify-between">
-                <span className="text-sm font-semibold">{h.name}</span>
-                <span className="text-[10px] text-zinc-600">{h.farm}</span>
+                <span className="flex items-center gap-1.5 text-sm font-semibold">
+                  <span className={`inline-block h-2 w-2 rounded-full ${
+                    h.linkStatus === "online" ? "bg-emerald-400" : h.linkStatus === "stale" ? "bg-amber-400" : "bg-zinc-600"
+                  }`} title={h.linkStatus === "online" ? "Online — dane świeże" : h.linkStatus === "stale" ? "Dane nieaktualne" : "Brak łączności"} />
+                  {h.name}
+                </span>
+                <span className="text-[10px] text-zinc-600">
+                  {h.minutesSince != null ? (h.minutesSince < 1 ? "przed chwilą" : h.minutesSince < 60 ? `${h.minutesSince} min temu` : `${Math.round(h.minutesSince / 60)} h temu`) : h.farm}
+                </span>
               </div>
               <div className="grid grid-cols-3 gap-1 text-center text-xs">
                 <div className={`rounded bg-zinc-900 py-1.5 ${num(h.tempC) > 28 ? "text-red-400" : "text-zinc-300"}`}><Thermometer className="mx-auto mb-0.5 h-3 w-3 text-zinc-500" />{h.tempC?.toFixed(0) ?? "—"}°C</div>
