@@ -2,7 +2,9 @@
 FROM node:20-alpine AS build
 WORKDIR /app
 COPY package*.json ./
+# Force rebuild 2026-09-09-19-10
 RUN rm -f package-lock.json && NODE_ENV=development NPM_CONFIG_LEGACY_PEER_DEPS=true npm install
+
 COPY . .
 RUN npm run build && ls -la dist/ && echo "=== PLIKI W DIST ===" && ls dist/*.js 2>/dev/null || echo "BRAK PLIKOW JS W DIST!"
 
