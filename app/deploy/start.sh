@@ -15,4 +15,4 @@ if [ "$SEED_DEMO" = "true" ]; then
 fi
 
 echo ">> Start serwera na porcie ${PORT:-3000}"
-exec node dist/boot.js
+exec node dist/api/boot.js
