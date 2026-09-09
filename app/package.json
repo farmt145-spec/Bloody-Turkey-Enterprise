@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && esbuild api/boot.ts db/migrate-all.ts db/seed.ts db/seed-ingredients.ts db/seed-daily.ts db/seed-erp.ts db/seed-gap.ts --platform=node --bundle --format=esm --outdir=dist --banner:js=\"import { createRequire } from 'module';const require = createRequire(import.meta.url);\"",
+    "build": "vite build && esbuild api/boot.ts db/migrate-all.ts db/seed.ts db/seed-ingredients.ts db/seed-daily.ts db/seed-erp.ts db/seed-gap.ts --platform=node --bundle --format=esm --outdir=dist --banner:js=\"import { createRequire } from 'module';const require = createRequire(import.meta.url);\" && ls -la dist/",
     "lint": "eslint .",
     "preview": "vite preview",
     "start": "NODE_ENV=production node dist/boot.js",
