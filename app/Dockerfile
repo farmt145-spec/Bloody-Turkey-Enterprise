@@ -2,7 +2,7 @@
 FROM node:20-alpine AS build
 WORKDIR /app
 COPY package*.json ./
-RUN npm install --legacy-peer-deps include=dev
+RUN NODE_ENV=development npm install
 COPY . .
 RUN npm run build
 
