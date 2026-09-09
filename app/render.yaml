@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: bloody-turkey
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /
+    envVars:
+      - key: DATABASE_URL
+        sync: false          # wklej connection string MySQL w panelu Render
+      - key: JWT_SECRET
+        generateValue: true
+      - key: UPLOAD_DIR
+        value: /data/uploads
+      - key: SEED_DEMO
+        value: "true"        # ustaw "false" po pierwszym wdrożeniu
+    disk:
+      name: uploads
+      mountPath: /data
+      sizeGB: 1

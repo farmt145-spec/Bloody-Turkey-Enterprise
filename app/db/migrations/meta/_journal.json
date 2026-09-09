@@ -1,0 +1,55 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1785961433884,
+      "tag": "0000_amusing_deadpool",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1785963982761,
+      "tag": "0001_military_spencer_smythe",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1785965706797,
+      "tag": "0002_fearless_slipstream",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1785977248059,
+      "tag": "0003_new_grandmaster",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1786135611410,
+      "tag": "0004_faithful_emma_frost",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1788901578828,
+      "tag": "0005_vengeful_colossus",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1788904613537,
+      "tag": "0006_lovely_hobgoblin",
+      "breakpoints": true
+    }
+  ]
+}
