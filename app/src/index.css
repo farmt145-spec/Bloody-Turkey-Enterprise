@@ -73,3 +73,10 @@
     @apply bg-background text-foreground;
   }
 }
+/* Wydruk raportów — białe tło, ukrycie nawigacji */
+@media print {
+  aside, .lg\:hidden, nav, header { display: none !important; }
+  main { margin-left: 0 !important; padding: 0 !important; }
+  body { background: #fff !important; color: #000 !important; }
+  @page { margin: 12mm; }
+}

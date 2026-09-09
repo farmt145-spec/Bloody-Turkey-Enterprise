@@ -23,6 +23,7 @@ import FarmSelect from "./pages/FarmSelect";
 import Slaughter from "./pages/Slaughter";
 import Obchod from "./pages/Obchod";
 import Normy from "./pages/Normy";
+import Reports from "./pages/Reports";
 import NotFound from "./pages/NotFound";
 import { getWorkspace } from "./lib/workspace";
 
@@ -56,6 +57,7 @@ export default function App() {
       <Route path="/ubojnia" element={L(<Slaughter />)} />
       <Route path="/obchod" element={L(<Obchod />)} />
       <Route path="/normy" element={L(<Normy />)} />
+      <Route path="/raporty" element={L(<Reports />)} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

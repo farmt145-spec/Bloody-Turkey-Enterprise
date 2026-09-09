@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   LayoutDashboard, Network, Scale, Wheat, HeartPulse, Coins, Bird,
   Truck, CalendarDays, Database, Menu, X, Workflow, BarChart3, BrainCircuit,
-  Boxes, Search, Bell, ChevronRight, FlaskConical, Command, Crown, FileCheck, Cable, Factory, ClipboardList, BookOpen,
+  Boxes, Search, Bell, ChevronRight, FlaskConical, Command, Crown, FileCheck, Cable, Factory, ClipboardList, BookOpen, FileText, RefreshCw,
 } from "lucide-react";
 import CommandPalette from "./CommandPalette";
 import ErrorBoundary from "./ErrorBoundary";
@@ -16,6 +16,7 @@ const NAV = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/centrum-decyzji", label: "Centrum Decyzji", icon: Command },
   { to: "/analityka", label: "Analityka", icon: BarChart3 },
+  { to: "/raporty", label: "Raporty", icon: FileText },
   { to: "/ai", label: "AI Advisor", icon: BrainCircuit },
   { to: "/struktura", label: "Struktura", icon: Network },
   { to: "/obchod", label: "Obchód dnia", icon: ClipboardList },
@@ -39,7 +40,7 @@ const NAV = [
 const LABELS: Record<string, string> = {
   "": "Dashboard", "centrum-decyzji": "Centrum Decyzji", wersje: "Wersje produktu", "raport-architektury": "Pokrycie architektury", analityka: "Analityka", ai: "AI Advisor", struktura: "Struktura",
   produkcja: "Produkcja", obchod: "Obchód dnia", transfery: "Transfery", harmonogram: "Harmonogram", zywienie: "Żywienie", "laboratorium-zywienia": "AI Nutrition Lab", normy: "Normy",
-  magazyn: "Magazyn", zdrowie: "Zdrowie", ekonomia: "Ekonomia", erp: "Moduły ERP", erd: "Model danych", integracje: "Integracje", ubojnia: "Ubojnia",
+  magazyn: "Magazyn", zdrowie: "Zdrowie", ekonomia: "Ekonomia", erp: "Moduły ERP", erd: "Model danych", integracje: "Integracje", ubojnia: "Ubojnia", raporty: "Raporty",
 };
 
 function Breadcrumbs() {
@@ -109,7 +110,22 @@ function NotificationBell() {
   const nav = useNavigate();
   const q = trpc.notifications.list.useQuery(undefined, { refetchInterval: 30000 });
   const markAll = trpc.notifications.markAllRead.useMutation({ onSuccess: () => q.refetch() });
+  const markRead = trpc.notifications.markRead.useMutation({ onSuccess: () => q.refetch() });
+  const utils = trpc.useUtils();
+  const scan = trpc.reports.generateAlerts.useMutation({
+    onSuccess: (r) => {
+      if (r.created.length > 0) utils.notifications.list.invalidate();
+    },
+  });
   const unread = (q.data ?? []).filter((n) => !n.read).length;
+
+  /* Skan reguł alertowych — przy wejściu i co 5 min */
+  useEffect(() => {
+    scan.mutate();
+    const t = setInterval(() => scan.mutate(), 5 * 60 * 1000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
@@ -133,12 +149,18 @@ function NotificationBell() {
         <div className="absolute right-0 top-full z-50 mt-2 w-80 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 shadow-2xl">
           <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-2.5">
             <span className="text-sm font-semibold">Powiadomienia</span>
-            {unread > 0 && <button onClick={() => markAll.mutate()} className="text-xs text-emerald-400 hover:underline">Oznacz wszystkie</button>}
+            <div className="flex items-center gap-3">
+              <button onClick={() => scan.mutate()} disabled={scan.isPending}
+                className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-200 disabled:opacity-50">
+                <RefreshCw className={`h-3 w-3 ${scan.isPending ? "animate-spin" : ""}`} /> Skanuj
+              </button>
+              {unread > 0 && <button onClick={() => markAll.mutate()} className="text-xs text-emerald-400 hover:underline">Oznacz wszystkie</button>}
+            </div>
           </div>
           <div className="max-h-80 overflow-y-auto">
             {(q.data ?? []).length === 0 && <div className="px-4 py-6 text-center text-sm text-zinc-500">Brak powiadomień</div>}
             {(q.data ?? []).map((n) => (
-              <button key={n.id} onClick={() => { setOpen(false); if (n.link) nav(n.link); }}
+              <button key={n.id} onClick={() => { markRead.mutate({ id: n.id }); setOpen(false); if (n.link) nav(n.link); }}
                 className={`block w-full border-b border-zinc-800/60 px-4 py-3 text-left hover:bg-zinc-800/60 ${n.read ? "opacity-50" : ""}`}>
                 <span className={`mr-2 inline-block rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase ${sevCls[n.severity]}`}>{n.severity}</span>
                 <span className="text-sm font-medium text-zinc-200">{n.title}</span>
