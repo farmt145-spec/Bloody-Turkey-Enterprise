@@ -1,19 +1,18 @@
-import { defineConfig } from "vitest/config";
-import path from "path";
-
-const templateRoot = path.resolve(import.meta.dirname);
+import { defineConfig } from 'vitest/config';
+import react from '@vitejs/plugin-react';
+import path from 'path';
 
 export default defineConfig({
-  root: templateRoot,
+  plugins: [react()],
+  test: {
+    environment: 'node',
+    globals: true,
+    setupFiles: [],
+  },
   resolve: {
     alias: {
-      "@": path.resolve(templateRoot, "src"),
-      "@contracts": path.resolve(templateRoot, "contracts"),
-      "@assets": path.resolve(templateRoot, "attached_assets"),
+      '@db': path.resolve(__dirname, './db'),
+      '@api': path.resolve(__dirname, './api'),
     },
-  },
-  test: {
-    environment: "node",
-    include: ["api/**/*.test.ts", "api/**/*.spec.ts"],
   },
 });
