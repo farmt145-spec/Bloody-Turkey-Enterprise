@@ -24,6 +24,7 @@ import Slaughter from "./pages/Slaughter";
 import Obchod from "./pages/Obchod";
 import Normy from "./pages/Normy";
 import Reports from "./pages/Reports";
+import AdminPanel from "./pages/AdminPanel";
 import NotFound from "./pages/NotFound";
 import { getWorkspace } from "./lib/workspace";
 
@@ -57,6 +58,7 @@ export default function App() {
       <Route path="/ubojnia" element={L(<Slaughter />)} />
       <Route path="/obchod" element={L(<Obchod />)} />
       <Route path="/normy" element={L(<Normy />)} />
+      <Route path="/admin" element={L(<AdminPanel />)} />
       <Route path="/raporty" element={L(<Reports />)} />
       <Route path="*" element={<NotFound />} />
     </Routes>
