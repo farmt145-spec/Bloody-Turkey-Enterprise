@@ -175,11 +175,11 @@ function NotificationBell() {
   );
 }
 
-export default function Layout({
+export default function Layout({ children }: { children: React.ReactNode }) {
   const userQuery = trpc.admin.getCurrentUser.useQuery();
   const user = userQuery.data;
   const userRole = user?.userRole || "worker";
- children }: { children: React.ReactNode }) {
+
   const loc = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   useEffect(() => {
@@ -203,9 +203,9 @@ export default function Layout({
       </div>
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
         {NAV.filter((n) => {
-        if (n.to === "/admin") return userRole === "admin" || userRole === "manager";
-        return tierDef().routes.some((r) => (r === "/" ? n.to === "/" : n.to.startsWith(r)));
-      }).map((n) => {
+          if (n.to === "/admin") return userRole === "admin" || userRole === "manager";
+          return tierDef().routes.some((r) => (r === "/" ? n.to === "/" : n.to.startsWith(r)));
+        }).map((n) => {
           const active = n.to === "/" ? loc.pathname === "/" : loc.pathname.startsWith(n.to) || (n.to.startsWith("/erp") && loc.pathname.startsWith("/erp"));
           return (
             <Link
@@ -277,3 +277,4 @@ export default function Layout({
     </div>
   );
 }
+
