@@ -103,6 +103,7 @@ export const adminRouter = createRouter({
         name: input.name,
         companyId: invite.companyId,
         role: invite.role === "admin" ? "admin" : "user",
+        userRole: invite.role,
       }).$returningId();
 
       await audit("users", userId, "create", {
@@ -126,7 +127,7 @@ export const adminRouter = createRouter({
       if (!old) throw new Error("Użytkownik nie istnieje");
 
       await db.update(s.users)
-        .set({ role: dbRole })
+        .set({ role: dbRole, userRole: input.role })
         .where(eq(s.users.id, input.userId));
 
       await audit("users", input.userId, "update", {
@@ -177,5 +178,16 @@ export const adminRouter = createRouter({
 
       return { ok: true };
     }),
+
+  /* ------- aktualny użytkownik ------- */
+  getCurrentUser: publicQuery.query(async ({ ctx }) => {
+    if (!ctx.companyId) return null;
+    const db = getDb();
+    // Pobierz users z bazy — bez specificznego ID bo to endpoint dla zalogowanego
+    // Frontend powinien wysłać x-company-id w nagłówku; zwrócimy pierwszego usera z tej firmy
+    const [user] = await db.select().from(s.users).where(eq(s.users.companyId, ctx.companyId)).limit(1);
+    return user || null;
+  }),
+
 });
 

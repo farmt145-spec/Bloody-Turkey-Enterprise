@@ -27,6 +27,7 @@ export const users = mysqlTable("users", {
     .notNull()
     .$onUpdate(() => new Date()),
   lastSignInAt: timestamp("lastSignInAt").defaultNow().notNull(),
+  userRole: mysqlEnum("userRole", ["worker", "manager", "admin"]).notNull().default("worker"),
 });
 
 export type User = typeof users.$inferSelect;

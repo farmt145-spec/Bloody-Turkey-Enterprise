@@ -400,4 +400,25 @@ export const orgRouter = createRouter({
     .query(async ({ input }) => {
       return getDb().select().from(s.auditLog).orderBy(desc(s.auditLog.id)).limit(input?.limit ?? 50);
     }),
+
+  /* ------- company profile ------- */
+  getById: publicQuery
+    .input(z.object({ companyId: z.number() }))
+    .query(async ({ input }) => {
+      const [company] = await getDb().select().from(s.companies).where(eq(s.companies.id, input.companyId));
+      return company || null;
+    }),
+
+  updateTier: publicQuery
+    .input(z.object({ companyId: z.number(), tier: z.enum(["standard", "advanced", "professional", "enterprise"]) }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const [old] = await db.select().from(s.companies).where(eq(s.companies.id, input.companyId));
+      await db.update(s.companies)
+        .set({ tier: input.tier, updatedBy: "panel" })
+        .where(eq(s.companies.id, input.companyId));
+      await audit("companies", input.companyId, "update", { oldValues: { tier: old.tier }, newValues: { tier: input.tier } });
+      return { ok: true };
+    }),
+
 });
