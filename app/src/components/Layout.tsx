@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   LayoutDashboard, Network, Scale, Wheat, HeartPulse, Coins, Bird,
   Truck, CalendarDays, Database, Menu, X, Workflow, BarChart3, BrainCircuit,
-  Boxes, Search, Bell, ChevronRight, FlaskConical, Command, Crown, FileCheck, Cable, Factory, ClipboardList, BookOpen, FileText, RefreshCw,
+  Boxes, Search, Bell, ChevronRight, FlaskConical, Command, Crown, FileCheck, Cable, Factory, ClipboardList, BookOpen, FileText, RefreshC, Usersw,
 } from "lucide-react";
 import CommandPalette from "./CommandPalette";
 import ErrorBoundary from "./ErrorBoundary";
@@ -35,12 +35,13 @@ const NAV = [
   { to: "/integracje", label: "Integracje", icon: Cable },
   { to: "/wersje", label: "Wersje produktu", icon: Crown },
   { to: "/raport-architektury", label: "Pokrycie architektury", icon: FileCheck },
+    { to: "/admin", label: "Panel Admina", icon: Users },
 ];
 
 const LABELS: Record<string, string> = {
   "": "Dashboard", "centrum-decyzji": "Centrum Decyzji", wersje: "Wersje produktu", "raport-architektury": "Pokrycie architektury", analityka: "Analityka", ai: "AI Advisor", struktura: "Struktura",
   produkcja: "Produkcja", obchod: "Obchód dnia", transfery: "Transfery", harmonogram: "Harmonogram", zywienie: "Żywienie", "laboratorium-zywienia": "AI Nutrition Lab", normy: "Normy",
-  magazyn: "Magazyn", zdrowie: "Zdrowie", ekonomia: "Ekonomia", erp: "Moduły ERP", erd: "Model danych", integracje: "Integracje", ubojnia: "Ubojnia", raporty: "Raporty",
+  magazyn: "Magazyn", zdrowie: "Zdrowie", ekonomia: "Ekonomia", erp: "Moduły ERP", erd: "Model danych", integracje: "Integracje", ubojnia: "Ubojnia", raporty: "Raporty", admin: "Panel Admina"
 };
 
 function Breadcrumbs() {

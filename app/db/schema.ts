@@ -32,6 +32,27 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
+
+export const userInvites = mysqlTable("user_invites", {
+  id: serial("id").primaryKey(),
+  companyId: bigint("companyId", { mode: "number", unsigned: true }).notNull(),
+  email: varchar("email", { length: 320 }).notNull(),
+  role: mysqlEnum("role", ["worker", "manager", "admin"]).notNull().default("worker"),
+  token: varchar("token", { length: 64 }).notNull().unique(),
+  status: mysqlEnum("status", ["pending", "accepted", "cancelled"]).default("pending").notNull(),
+  message: text("message"),
+  sentAt: timestamp("sentAt").defaultNow(),
+  acceptedAt: timestamp("acceptedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt")
+    .defaultNow()
+    .notNull()
+    .$onUpdate(() => new Date()),
+});
+
+export type UserInvite = typeof userInvites.$inferSelect;
+export type InsertUserInvite = typeof userInvites.$inferInsert;
+
 /* ============================================================
    AUDIT TRAIL — globalny, każda tabela biznesowa
    ============================================================ */
