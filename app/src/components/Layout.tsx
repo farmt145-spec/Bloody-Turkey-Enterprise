@@ -175,7 +175,11 @@ function NotificationBell() {
   );
 }
 
-export default function Layout({ children }: { children: React.ReactNode }) {
+export default function Layout({
+  const userQuery = trpc.admin.getCurrentUser.useQuery();
+  const user = userQuery.data;
+  const userRole = user?.userRole || "worker";
+ children }: { children: React.ReactNode }) {
   const loc = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   useEffect(() => {
