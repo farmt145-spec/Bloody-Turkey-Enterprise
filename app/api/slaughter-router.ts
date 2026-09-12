@@ -334,62 +334,53 @@ export const slaughterRouter = createRouter({
     const db = getDb();
     if (!ctx.companyId || !ctx.farmId) throw new Error("Brak danych firmy");
 
-    // 1. Stwórz batch demo (jeśli nie istnieje)
-    let batch = (await db.select().from(s.batches).where(and(
-      eq(s.batches.companyId, BigInt(ctx.companyId)),
-      eq(s.batches.farmId, BigInt(ctx.farmId)),
-      like(s.batches.code, 'DEMO-%')
-    )).limit(1))[0];
+    // 1. Find first house for this farm
+    const [house] = await db.select().from(s.houses).where(eq(s.houses.farmId, BigInt(ctx.farmId))).limit(1);
+    const houseId = house?.id || BigInt(1);
 
-    if (!batch) {
-      const demoCode = `DEMO-${Date.now()}`;
-      const today = new Date().toISOString().split('T')[0];
-      const [{ id: batchId }] = await db.insert(s.batches).values({
-        code: demoCode,
-        companyId: BigInt(ctx.companyId),
-        farmId: BigInt(ctx.farmId),
-        houseId: BigInt(1), // Default house
-        geneticLine: "Ross 308",
-        sex: "mixed",
-        chickSupplier: "Hatchery Demo",
-        chickPrice: "2.5",
-        startDate: today,
-        plannedEndDate: new Date(Date.now() + 35 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        initialCount: 5000,
-        currentCount: 5000,
-        soldCount: 0,
-        status: "active",
-        updatedBy: "demo",
-      }).$returningId();
-      batch = { id: batchId, code: demoCode, batchId, companyId: ctx.companyId, farmId: ctx.farmId } as any;
-    }
+    // 2. Stwórz batch demo
+    const demoCode = `DEMO-${Date.now()}`;
+    const today = new Date().toISOString().split('T')[0];
+    const [{ id: batchId }] = await db.insert(s.batches).values({
+      code: demoCode,
+      houseId,
+      geneticLine: "Ross 308",
+      sex: "mixed",
+      chickSupplier: "Hatchery Demo",
+      chickPrice: "2.5",
+      startDate: today,
+      plannedEndDate: new Date(Date.now() + 35 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      initialCount: 5000,
+      currentCount: 5000,
+      soldCount: 0,
+      status: "active",
+      updatedBy: "demo",
+    }).$returningId();
 
-    // 2. Stwórz plan uboju
+    // 3. Stwórz plan uboju
     const plannedDate = new Date(Date.now() + 35 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     const [{ planId }] = await db.insert(s.slaughterPlans).values({
-      code: `PLAN-${Date.now()}`,
       companyId: BigInt(ctx.companyId),
       farmId: BigInt(ctx.farmId),
-      batchId: BigInt(batch.id),
+      batchId: BigInt(batchId),
       plannedDate,
       plannedCount: 4800,
       targetAvgWeightKg: "2.4",
       status: "planned",
     }).$returningId();
 
-    // 3. Stwórz partię ubojową
+    // 4. Stwórz partię ubojową
     const code = `UB-${String(ctx.farmId).padStart(4, "0")}-${String(Date.now()).slice(-6)}`;
     const [{ id: sbId }] = await db.insert(s.slaughterBatches).values({
       code,
-      planId: BigInt(planId),
       companyId: BigInt(ctx.companyId),
       farmId: BigInt(ctx.farmId),
-      batchId: BigInt(batch.id),
+      batchId: BigInt(batchId),
       status: "created",
       isDemo: true,
     }).$returningId();
 
-    // 4. Dodaj transport
+    // 5. Dodaj transport
     await db.insert(s.slaughterTransports).values({
       slaughterBatchId: BigInt(sbId),
       vehiclePlate: "WX1234A",
@@ -401,16 +392,16 @@ export const slaughterRouter = createRouter({
       status: "completed",
     });
 
-    // 5. Przyjęcie
-    const [{ recId }] = await db.insert(s.slaughterReceptions).values({
+    // 6. Przyjęcie
+    await db.insert(s.slaughterReceptions).values({
       slaughterBatchId: BigInt(sbId),
       receivedCount: 4788,
       deadOnArrival: 5,
       rejectedCount: 2,
       liveWeightKg: "11496",
-    }).$returningId();
+    });
 
-    // 6. Wynik uboju
+    // 7. Wynik uboju
     const yieldPct = (11304 / 11496) * 100;
     await db.insert(s.slaughterResults).values({
       slaughterBatchId: BigInt(sbId),
@@ -424,7 +415,7 @@ export const slaughterRouter = createRouter({
       deadCountReceived: 7,
     });
 
-    // 7. Klasyfikacja
+    // 8. Klasyfikacja
     await db.insert(s.slaughterClassifications).values({
       slaughterBatchId: BigInt(sbId),
       classCode: "A",
@@ -432,7 +423,7 @@ export const slaughterRouter = createRouter({
       weightKg: "9043",
     });
 
-    // 8. Rozliczenie
+    // 9. Rozliczenie
     const netAmount = (11304 * 11.5) + 500 - 100;
     await db.insert(s.slaughterSettlements).values({
       slaughterBatchId: BigInt(sbId),
@@ -445,7 +436,7 @@ export const slaughterRouter = createRouter({
       documentNumber: `FV-${Date.now()}`,
     });
 
-    // 9. Update status partii
+    // 10. Update status partii
     await db.update(s.slaughterBatches).set({ status: "settled" }).where(eq(s.slaughterBatches.id, sbId));
 
     return { code, id: sbId };
