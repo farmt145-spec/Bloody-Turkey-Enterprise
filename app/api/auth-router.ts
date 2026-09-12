@@ -22,37 +22,40 @@ export const authRouter = createRouter({
       if (existing) throw new Error("Email już zarejestrowany");
       
       // 1. Stwórz firmę
-      const [{ companyId }] = await db.insert(s.companies).values({
+      const companyResult = await db.insert(s.companies).values({
         name: input.companyName,
         countryCode: "PL",
         baseCurrency: "EUR",
         isDemo: false,
         declaredHouses: 1,
         status: "active",
-      }).$returningId();
+      });
+      const companyId = companyResult.insertId;
       
       // 2. Stwórz farmę
-      const [{ farmId }] = await db.insert(s.farms).values({
+      const farmResult = await db.insert(s.farms).values({
         companyId: BigInt(companyId),
         name: input.farmName,
         status: "active",
-      }).$returningId();
+      });
+      const farmId = farmResult.insertId;
       
       // 3. Hash hasła
       const passwordHash = await hashPassword(input.password);
       
       // 4. Stwórz użytkownika (admin)
-      const [{ userId }] = await db.insert(s.users).values({
+      const userResult = await db.insert(s.users).values({
         companyId: BigInt(companyId),
         email: input.email,
         name: input.email.split("@")[0],
         userRole: "admin",
         role: "admin",
         password: passwordHash,
-      }).$returningId();
+      });
+      const userId = userResult.insertId;
       
       // 5. Wygeneruj token
-      const token = generateToken(userId, companyId);
+      const token = generateToken(Number(userId), Number(companyId));
       
       return { 
         companyId, 
