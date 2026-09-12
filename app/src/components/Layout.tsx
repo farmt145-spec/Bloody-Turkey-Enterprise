@@ -17,6 +17,7 @@ const NAV = [
   { to: "/centrum-decyzji", label: "Centrum Decyzji", icon: Command },
   { to: "/analityka", label: "Analityka", icon: BarChart3 },
   { to: "/raporty", label: "Raporty", icon: FileText },
+  { to: "/admin", label: "Panel Admina", icon: Users },
   { to: "/ai", label: "AI Advisor", icon: BrainCircuit },
   { to: "/struktura", label: "Struktura", icon: Network },
   { to: "/obchod", label: "Obchód dnia", icon: ClipboardList },
