@@ -342,19 +342,26 @@ export const slaughterRouter = createRouter({
     )).limit(1))[0];
 
     if (!batch) {
+      const demoCode = `DEMO-${Date.now()}`;
+      const today = new Date().toISOString().split('T')[0];
       const [{ id: batchId }] = await db.insert(s.batches).values({
-        code: `DEMO-${Date.now()}`,
+        code: demoCode,
         companyId: BigInt(ctx.companyId),
         farmId: BigInt(ctx.farmId),
-        houseId: null,
+        houseId: BigInt(1), // Default house
         geneticLine: "Ross 308",
-        countReceived: 5000,
+        sex: "mixed",
+        chickSupplier: "Hatchery Demo",
+        chickPrice: "2.5",
+        startDate: today,
+        plannedEndDate: new Date(Date.now() + 35 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        initialCount: 5000,
         currentCount: 5000,
-        chicksPrice: 2.5,
+        soldCount: 0,
         status: "active",
-        startDate: new Date().toISOString().split('T')[0],
+        updatedBy: "demo",
       }).$returningId();
-      batch = { id: batchId, code: `DEMO-${Date.now()}`, batchId, companyId: ctx.companyId, farmId: ctx.farmId } as any;
+      batch = { id: batchId, code: demoCode, batchId, companyId: ctx.companyId, farmId: ctx.farmId } as any;
     }
 
     // 2. Stwórz plan uboju

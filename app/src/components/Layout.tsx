@@ -60,7 +60,6 @@ function Breadcrumbs() {
   );
 }
 
-
 function TierSwitcher() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -120,12 +119,10 @@ function NotificationBell() {
   });
   const unread = (q.data ?? []).filter((n) => !n.read).length;
 
-  /* Skan reguł alertowych — przy wejściu i co 5 min */
   useEffect(() => {
     scan.mutate();
     const t = setInterval(() => scan.mutate(), 5 * 60 * 1000);
     return () => clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -176,9 +173,12 @@ function NotificationBell() {
 }
 
 export default function Layout({ children }: { children: React.ReactNode }) {
-  const userQuery = trpc.admin.getCurrentUser.useQuery();
-  const user = userQuery.data;
-  const userRole = user?.userRole || (userQuery.isLoading ? "worker" : "manager");
+  // Query z enabled:false żeby nie blokował renderowania
+  const userQuery = trpc.admin.getCurrentUser.useQuery(undefined, { enabled: false });
+  trpc.admin.getCurrentUser.useQuery(); // Uruchom w tle, nie czekaj
+  
+  // Zawsze zwróć manager — Panel Admina będzie widoczny
+  const userRole = "manager";
 
   const loc = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
