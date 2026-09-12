@@ -338,7 +338,7 @@ export const slaughterRouter = createRouter({
     let batch = (await db.select().from(s.batches).where(and(
       eq(s.batches.companyId, BigInt(ctx.companyId)),
       eq(s.batches.farmId, BigInt(ctx.farmId)),
-      sql`code LIKE 'DEMO-%'`
+      s.batches.code.like('DEMO-%')
     )).limit(1))[0];
 
     if (!batch) {
