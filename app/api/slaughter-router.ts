@@ -359,7 +359,7 @@ export const slaughterRouter = createRouter({
 
     // 3. Stwórz plan uboju
     const plannedDate = new Date(Date.now() + 35 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const [{ planId }] = await db.insert(s.slaughterPlans).values({
+    const [{ id: planId }] = await db.insert(s.slaughterPlans).values({
       companyId: BigInt(ctx.companyId),
       farmId: BigInt(ctx.farmId),
       batchId: BigInt(batchId),
