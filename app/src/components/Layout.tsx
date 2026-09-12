@@ -178,7 +178,7 @@ function NotificationBell() {
 export default function Layout({ children }: { children: React.ReactNode }) {
   const userQuery = trpc.admin.getCurrentUser.useQuery();
   const user = userQuery.data;
-  const userRole = user?.userRole || "worker";
+  const userRole = user?.userRole || (userQuery.isLoading ? "worker" : "manager");
 
   const loc = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);

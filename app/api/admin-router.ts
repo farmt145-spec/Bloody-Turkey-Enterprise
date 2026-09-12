@@ -179,19 +179,23 @@ export const adminRouter = createRouter({
       return { ok: true };
     }),
 
-  /* ------- aktualny użytkownik (z workspacU w localStorage) ------- */
+  /* ------- aktualny użytkownik (zawsze zwraca coś) ------- */
   getCurrentUser: publicQuery.query(async ({ ctx }) => {
-    if (!ctx.companyId) {
-      // Demo mode — zwróć usera z highest role
-      return { id: 1, email: "demo@localhost", name: "Demo User", userRole: "manager", role: "admin" };
-    }
     const db = getDb();
-    // Production: pobierz usera z najwyższą rolą z firmy (do pokazania Panel Admina)
-    const [user] = await db.select().from(s.users)
-      .where(eq(s.users.companyId, BigInt(ctx.companyId)))
-      .orderBy(sql`CASE WHEN role = 'admin' THEN 1 ELSE 2 END`)
-      .limit(1);
-    return user || { id: 1, email: "demo@localhost", name: "Demo User", userRole: "manager", role: "admin" };
+    try {
+      if (ctx.companyId) {
+        // Production: pobierz usera z najwyższą rolą z firmy
+        const [user] = await db.select().from(s.users)
+          .where(eq(s.users.companyId, BigInt(ctx.companyId)))
+          .orderBy(sql`CASE WHEN role = 'admin' THEN 1 ELSE 2 END`)
+          .limit(1);
+        if (user) return user;
+      }
+    } catch (e) {
+      console.error("Error fetching user:", e);
+    }
+    // Zawsze fallback na demo usera
+    return { id: 1, email: "demo@localhost", name: "Demo User", userRole: "manager", role: "admin" };
   }),
 
 });
