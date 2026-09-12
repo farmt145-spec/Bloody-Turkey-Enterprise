@@ -195,7 +195,7 @@ export const slaughterRouter = createRouter({
         batchId: BigInt(input.batchId),
         plannedDate: input.plannedDate,
         plannedCount: input.plannedCount,
-        targetAvgWeightKg: input.targetAvgWeightKg : null,
+        targetAvgWeightKg: input.targetAvgWeightKg || null,
         status: "planned",
         notes: input.notes,
       }).$returningId();
