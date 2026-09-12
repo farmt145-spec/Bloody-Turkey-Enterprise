@@ -88,7 +88,19 @@ const TIER_KEY = "bt_tier";
 
 export function getTier(): Tier {
   if (typeof window === "undefined") return "professional";
-  return (localStorage.getItem(TIER_KEY) as Tier) ?? "professional";
+  const local = localStorage.getItem(TIER_KEY) as Tier;
+  // Jeśli jest tier w localStorage (demo mode), użyj go
+  if (local && local !== "professional") return local;
+  // W production (baza danych) zwróci się z API w komponencie
+  return "professional";
+}
+
+export function isDemo(): boolean {
+  // Demo mode: jest tier w localStorage lub brak workspace
+  if (typeof window === "undefined") return false;
+  const local = localStorage.getItem(TIER_KEY);
+  const workspace = localStorage.getItem("bt_workspace");
+  return !!local || !workspace;
 }
 export function setTier(t: Tier) {
   localStorage.setItem(TIER_KEY, t);
@@ -97,6 +109,19 @@ export function setTier(t: Tier) {
 export function tierDef(t?: Tier): TierDef {
   return TIERS.find((x) => x.key === (t ?? getTier())) ?? TIERS[2];
 }
+
+export function useTier(companyId?: number) {
+  // Hook must be client-side only
+  if (typeof window === "undefined") return "professional";
+  
+  const isInDemo = isDemo();
+  // W demo mode czytaj z localStorage
+  if (isInDemo) return getTier();
+  
+  // W production: powinna być inna logika — na razie fallback
+  return getTier();
+}
+
 export function routeAllowed(pathname: string, t?: Tier): boolean {
   const def = tierDef(t);
   return def.routes.some((r) => (r === "/" ? pathname === "/" : pathname.startsWith(r)));
