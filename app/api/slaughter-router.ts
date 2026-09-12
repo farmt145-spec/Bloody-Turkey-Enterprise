@@ -2,7 +2,7 @@ import { z } from "zod";
 import { createRouter, publicQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import * as s from "@db/schema";
-import { eq, and, desc, sql, gt, or } from "drizzle-orm";
+import { eq, and, desc, sql, gt, or, like } from "drizzle-orm";
 import { audit } from "./audit";
 
 export const slaughterRouter = createRouter({
@@ -338,7 +338,7 @@ export const slaughterRouter = createRouter({
     let batch = (await db.select().from(s.batches).where(and(
       eq(s.batches.companyId, BigInt(ctx.companyId)),
       eq(s.batches.farmId, BigInt(ctx.farmId)),
-      s.batches.code.like('DEMO-%')
+      like(s.batches.code, 'DEMO-%')
     )).limit(1))[0];
 
     if (!batch) {
