@@ -15,6 +15,7 @@ import { obchodRouter } from "./obchod-router";
 import { normyRouter } from "./normy-router";
 import { reportsRouter } from "./reports-router";
 import { adminRouter } from "./admin-router";
+import { authRouter } from "./auth-router";
 
 export const appRouter = createRouter({
   ping: publicQuery.query(() => ({ ok: true, ts: Date.now() })),
@@ -37,6 +38,7 @@ export const appRouter = createRouter({
   normy: normyRouter,
   reports: reportsRouter,
   admin: adminRouter,
+  auth: authRouter,
 });
 
 export type AppRouter = typeof appRouter;

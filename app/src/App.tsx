@@ -25,8 +25,17 @@ import Obchod from "./pages/Obchod";
 import Normy from "./pages/Normy";
 import Reports from "./pages/Reports";
 import AdminPanel from "./pages/AdminPanel";
+import SignUp from "./pages/SignUp";
+import Login from "./pages/Login";
+import { useAuth } from "./providers/auth";
 import NotFound from "./pages/NotFound";
 import { getWorkspace } from "./lib/workspace";
+
+const ProtectedRoute = ({ el }: { el: React.ReactNode }) => {
+  const { isAuthenticated, isLoading } = useAuth();
+  if (isLoading) return <div className="flex h-screen items-center justify-center bg-zinc-950">Loading...</div>;
+  return isAuthenticated ? <>{el}</> : <Navigate to="/login" replace />;
+};
 
 const L = (el: React.ReactNode) =>
   getWorkspace() ? <Layout>{el}</Layout> : <Navigate to="/wybierz-gospodarstwo" replace />;
@@ -34,7 +43,9 @@ const L = (el: React.ReactNode) =>
 export default function App() {
   return (
     <Routes>
-      <Route path="/wybierz-gospodarstwo" element={<FarmSelect />} />
+      <Route path="/signup" element={<SignUp />} />
+      <Route path="/login" element={<Login />} />
+      <Route path="/wybierz-gospodarstwo" element={<ProtectedRoute el={<FarmSelect />} />} />
       <Route path="/" element={L(<Dashboard />)} />
       <Route path="/centrum-decyzji" element={L(<CommandCenter />)} />
       <Route path="/struktura" element={L(<Structure />)} />

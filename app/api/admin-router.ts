@@ -54,6 +54,56 @@ export const adminRouter = createRouter({
     }),
 
   /* ------- zaproś użytkownika ------- */
+  sendInvite: publicQuery
+    .input(z.object({ companyId: z.number(), email: z.string().email(), role: z.enum(["worker", "manager", "admin"]), message: z.string().optional() }))
+    .mutation(async ({ input }) => {
+      // TODO: Wyślij email z zaproszeniem
+      console.log(`Invitation sent to ${input.email} for company ${input.companyId}`);
+      return { ok: true, email: input.email };
+    }),
+
+  /* ------- lista użytkowników ------- */
+  users: publicQuery.query(async ({ ctx }) => {
+    if (!ctx.companyId) return [];
+    const db = getDb();
+    return db.select().from(s.users).where(eq(s.users.companyId, BigInt(ctx.companyId)));
+  }),
+
+  /* ------- lista zaproszeń ------- */
+  userInvites: publicQuery.query(async ({ ctx }) => {
+    if (!ctx.companyId) return [];
+    const db = getDb();
+    return db.select().from(s.userInvites).where(eq(s.userInvites.companyId, BigInt(ctx.companyId)));
+  }),
+
+  /* ------- usuń użytkownika ------- */
+  removeUser: publicQuery
+    .input(z.object({ userId: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      await db.delete(s.users).where(eq(s.users.id, input.userId));
+      return { ok: true };
+    }),
+
+  /* ------- zmień rolę użytkownika ------- */
+  updateUserRole: publicQuery
+    .input(z.object({ userId: z.number(), role: z.enum(["worker", "manager", "admin"]) }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      await db.update(s.users).set({ userRole: input.role, role: input.role }).where(eq(s.users.id, input.userId));
+      return { ok: true };
+    }),
+
+  /* ------- anuluj zaproszenie ------- */
+  cancelInvite: publicQuery
+    .input(z.object({ inviteId: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      await db.delete(s.userInvites).where(eq(s.userInvites.id, input.inviteId));
+      return { ok: true };
+    }),
+
+  /* ------- zaproś użytkownika ------- */
   inviteUser: publicQuery
     .input(z.object({ email: z.string().email(), role: z.enum(["worker", "manager", "admin"]) }))
     .mutation(async ({ input, ctx }) => {

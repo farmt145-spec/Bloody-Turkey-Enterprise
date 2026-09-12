@@ -18,6 +18,7 @@ export const users = mysqlTable("users", {
   unionId: varchar("unionId", { length: 255 }).notNull().unique(),
   name: varchar("name", { length: 255 }),
   email: varchar("email", { length: 320 }),
+  password: varchar("password", { length: 255 }),
   avatar: text("avatar"),
   role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
   companyId: bigint("companyId", { mode: "number", unsigned: true }),

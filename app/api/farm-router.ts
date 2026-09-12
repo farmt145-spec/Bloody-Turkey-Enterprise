@@ -4,6 +4,7 @@ import { getDb } from "./queries/connection";
 import * as s from "@db/schema";
 import { eq, desc, sql, and, ne, inArray } from "drizzle-orm";
 import { assertBatchAccess, scopedBatchIds, scopedFarmIds } from "./tenant";
+import { ensureDemoData } from "./demo-data";
 
 const num = (v: unknown) => Number(v ?? 0);
 
@@ -105,7 +106,12 @@ const orgRouter = createRouter({
 const productionRouter = createRouter({
   batches: publicQuery.query(async ({ ctx }) => {
     const db = getDb();
-    const ids = await scopedBatchIds(ctx);
+    let ids = await scopedBatchIds(ctx);
+    // Jeśli brak batchów, stwórz demo batch
+    if (ids.length === 0 && ctx.companyId && ctx.farmId) {
+      await ensureDemoData(BigInt(ctx.companyId), BigInt(ctx.farmId));
+      ids = await scopedBatchIds(ctx);
+    }
     if (ids.length === 0) return [];
     const [batchRows, houseRows, farmRows, agg] = await Promise.all([
       db.select().from(s.batches).where(inArray(s.batches.id, ids)),
