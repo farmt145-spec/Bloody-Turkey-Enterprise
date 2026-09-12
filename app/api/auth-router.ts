@@ -30,7 +30,7 @@ export const authRouter = createRouter({
       if (!company) throw new Error("Nie udało się utworzyć firmy");
       const companyId = company.id;
       
-      // 2. Insert farm with default coords (Poland center)
+      // 2. Insert farm
       await db.insert(s.farms).values({
         companyId: company.id,
         name: input.farmName,
@@ -48,8 +48,12 @@ export const authRouter = createRouter({
       // 3. Hash password
       const passwordHash = await hashPassword(input.password);
       
-      // 4. Insert user
+      // 4. Generate unique unionId
+      const unionId = `user_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+      
+      // 5. Insert user
       await db.insert(s.users).values({
+        unionId: unionId,
         companyId: company.id,
         email: input.email,
         name: input.email.split("@")[0],
@@ -62,7 +66,7 @@ export const authRouter = createRouter({
         .limit(1);
       if (!user) throw new Error("Nie udało się utworzyć użytkownika");
       
-      // 5. Generate token
+      // 6. Generate token
       const token = generateToken(Number(user.id), Number(companyId));
       
       return { 
