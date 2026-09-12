@@ -1,3 +1,4 @@
+import { productionRouter } from "./production-router";
 import { farmRouter } from "./farm-router";
 import { orgRouter } from "./org-router";
 import { dailyRouter, feedProgramRouter } from "./daily-router";
@@ -39,6 +40,7 @@ export const appRouter = createRouter({
   reports: reportsRouter,
   admin: adminRouter,
   auth: authRouter,
+  production: productionRouter,
 });
 
 export type AppRouter = typeof appRouter;
