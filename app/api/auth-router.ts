@@ -19,7 +19,7 @@ export const authRouter = createRouter({
       const [existing] = await db.select().from(s.users).where(eq(s.users.email, input.email)).limit(1);
       if (existing) throw new Error("Email już zarejestrowany");
       
-      // 1. Insert company i get ID via SELECT
+      // 1. Insert company
       await db.insert(s.companies).values({
         name: input.companyName,
         countryCode: "PL",
@@ -30,10 +30,14 @@ export const authRouter = createRouter({
       if (!company) throw new Error("Nie udało się utworzyć firmy");
       const companyId = company.id;
       
-      // 2. Insert farm
+      // 2. Insert farm with default coords (Poland center)
       await db.insert(s.farms).values({
         companyId: company.id,
         name: input.farmName,
+        countryCode: "PL",
+        city: "Warszawa",
+        lat: "52.2297",
+        lng: "21.0122",
       });
       const [farm] = await db.select().from(s.farms)
         .where(eq(s.farms.companyId, company.id))
