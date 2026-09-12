@@ -24,7 +24,10 @@ export const authRouter = createRouter({
       // 1. Stwórz firmę
       const [{ companyId }] = await db.insert(s.companies).values({
         name: input.companyName,
-        tier: "standard",
+        countryCode: "PL",
+        baseCurrency: "EUR",
+        isDemo: false,
+        declaredHouses: 1,
         status: "active",
       }).$returningId();
       
@@ -107,4 +110,5 @@ export const authRouter = createRouter({
       return { exists: !!user };
     }),
 });
+
 
