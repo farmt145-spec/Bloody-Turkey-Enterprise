@@ -195,7 +195,7 @@ export const slaughterRouter = createRouter({
         batchId: BigInt(input.batchId),
         plannedDate: input.plannedDate,
         plannedCount: input.plannedCount,
-        targetAvgWeightKg: input.targetAvgWeightKg ? input.targetAvgWeightKg.toString() : null,
+        targetAvgWeightKg: input.targetAvgWeightKg : null,
         status: "planned",
         notes: input.notes,
       }).$returningId();
@@ -214,7 +214,7 @@ export const slaughterRouter = createRouter({
         driverName: input.driverName,
         loadedCount: input.loadedCount,
         distanceKm: input.distanceKm,
-        transportCost: input.transportCost.toString(),
+        transportCost: input.transportCost,
         deadInTransport: input.deadInTransport,
         status: "completed",
       }).$returningId();
@@ -294,7 +294,7 @@ export const slaughterRouter = createRouter({
 
       const [{ id }] = await db.insert(s.slaughterSettlements).values({
         slaughterBatchId: BigInt(input.slaughterBatchId),
-        pricePerKg: input.pricePerKg.toString(),
+        pricePerKg: input.pricePerKg,
         grossAmount: gross.toString(),
         bonuses: (input.bonuses || 0).toString(),
         deductions: (input.deductions || 0).toString(),
@@ -347,7 +347,7 @@ export const slaughterRouter = createRouter({
       geneticLine: "Ross 308",
       sex: "mixed",
       chickSupplier: "Hatchery Demo",
-      chickPrice: "2.5",
+      chickPrice: 2.5,
       startDate: today,
       plannedEndDate: new Date(Date.now() + 35 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       initialCount: 5000,
@@ -387,7 +387,7 @@ export const slaughterRouter = createRouter({
       driverName: "Jan Nowak",
       loadedCount: 4800,
       distanceKm: 45,
-      transportCost: "450",
+      transportCost: 450,
       deadInTransport: 12,
       status: "completed",
     });
@@ -427,7 +427,7 @@ export const slaughterRouter = createRouter({
     const netAmount = (11304 * 11.5) + 500 - 100;
     await db.insert(s.slaughterSettlements).values({
       slaughterBatchId: BigInt(sbId),
-      pricePerKg: "11.50",
+      pricePerKg: 11.50,
       grossAmount: (11304 * 11.5).toString(),
       bonuses: "500",
       deductions: "100",
