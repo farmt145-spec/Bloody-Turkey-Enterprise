@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   LayoutDashboard, Network, Scale, Wheat, HeartPulse, Coins, Bird,
   Truck, CalendarDays, Database, Menu, X, Workflow, BarChart3, BrainCircuit,
-  Boxes, Search, Bell, ChevronRight, FlaskConical, Command, Crown, FileCheck, Cable, Factory, ClipboardList, BookOpen, FileText, RefreshC, Usersw,
+  Boxes, Search, Bell, ChevronRight, FlaskConical, Command, Crown, FileCheck, Cable, Factory, ClipboardList, BookOpen, FileText, RefreshCw, Users,
 } from "lucide-react";
 import CommandPalette from "./CommandPalette";
 import ErrorBoundary from "./ErrorBoundary";
@@ -36,7 +36,6 @@ const NAV = [
   { to: "/integracje", label: "Integracje", icon: Cable },
   { to: "/wersje", label: "Wersje produktu", icon: Crown },
   { to: "/raport-architektury", label: "Pokrycie architektury", icon: FileCheck },
-    { to: "/admin", label: "Panel Admina", icon: Users },
 ];
 
 const LABELS: Record<string, string> = {
