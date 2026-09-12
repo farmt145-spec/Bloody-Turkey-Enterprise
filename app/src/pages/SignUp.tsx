@@ -2,10 +2,12 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { Bird, Mail, Lock, Building2, Home } from "lucide-react";
 import { trpc } from "@/providers/trpc";
+import { useAuth } from "@/providers/auth";
 import { toast } from "sonner";
 
 export default function SignUp() {
   const nav = useNavigate();
+  const { login } = useAuth();
   const [step, setStep] = useState<"form" | "success">("form");
   const [form, setForm] = useState({
     companyName: "",
@@ -17,9 +19,10 @@ export default function SignUp() {
 
   const signup = trpc.auth.signup.useMutation({
     onSuccess: (data) => {
-      toast.success("Konto założone! Zaloguj się.");
+      toast.success("Konto założone! Zalogowano.");
+      login(data);
       setStep("success");
-      setTimeout(() => nav("/login"), 2000);
+      setTimeout(() => nav("/wybierz-gospodarstwo"), 2000);
     },
     onError: (err) => {
       toast.error(err.message || "Błąd przy rejestracji");

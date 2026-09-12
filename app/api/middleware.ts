@@ -8,3 +8,9 @@ const t = initTRPC.context<TrpcContext>().create({
 
 export const createRouter = t.router;
 export const publicQuery = t.procedure;
+
+// Protected: wymaga JWT tokena
+export const protectedQuery = t.procedure.use(({ ctx, next }) => {
+  if (!ctx.userId) throw new Error("Unauthorized");
+  return next();
+});
