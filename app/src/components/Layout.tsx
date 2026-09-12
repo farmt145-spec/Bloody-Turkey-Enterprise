@@ -198,7 +198,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </button>
       </div>
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-        {NAV.filter((n) => tierDef().routes.some((r) => (r === "/" ? n.to === "/" : n.to.startsWith(r)))).map((n) => {
+        {NAV.filter((n) => {
+        if (n.to === "/admin") return userRole === "admin" || userRole === "manager";
+        return tierDef().routes.some((r) => (r === "/" ? n.to === "/" : n.to.startsWith(r)));
+      }).map((n) => {
           const active = n.to === "/" ? loc.pathname === "/" : loc.pathname.startsWith(n.to) || (n.to.startsWith("/erp") && loc.pathname.startsWith("/erp"));
           return (
             <Link
