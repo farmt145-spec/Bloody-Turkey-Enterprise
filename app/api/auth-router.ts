@@ -1,12 +1,12 @@
 import { z } from "zod";
-import { createRouter, publicQuery } from "./middleware";
+import { createRouter, publicQuery, publicMutation } from "./middleware";
 import { getDb } from "./queries/connection";
 import * as s from "@db/schema";
 import { eq } from "drizzle-orm";
 import { hashPassword, verifyPassword, generateToken } from "./auth-utils";
 
 export const authRouter = createRouter({
-  signup: publicQuery
+  signup: publicMutation
     .input(z.object({ 
       companyName: z.string().min(3),
       email: z.string().email(),
@@ -79,9 +79,9 @@ export const authRouter = createRouter({
       };
     }),
 
-  login: publicQuery
+  login: publicMutation
     .input(z.object({ email: z.string().email(), password: z.string() }))
-    .query(async ({ input }) => {
+    .mutation(async ({ input }) => {
       const db = getDb();
       const [user] = await db.select().from(s.users)
         .where(eq(s.users.email, input.email))
