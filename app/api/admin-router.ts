@@ -179,14 +179,19 @@ export const adminRouter = createRouter({
       return { ok: true };
     }),
 
-  /* ------- aktualny użytkownik ------- */
+  /* ------- aktualny użytkownik (z workspacU w localStorage) ------- */
   getCurrentUser: publicQuery.query(async ({ ctx }) => {
-    if (!ctx.companyId) return null;
+    if (!ctx.companyId) {
+      // Demo mode — zwróć usera z highest role
+      return { id: 1, email: "demo@localhost", name: "Demo User", userRole: "manager", role: "admin" };
+    }
     const db = getDb();
-    // Pobierz users z bazy — bez specificznego ID bo to endpoint dla zalogowanego
-    // Frontend powinien wysłać x-company-id w nagłówku; zwrócimy pierwszego usera z tej firmy
-    const [user] = await db.select().from(s.users).where(eq(s.users.companyId, ctx.companyId)).limit(1);
-    return user || null;
+    // Production: pobierz usera z najwyższą rolą z firmy (do pokazania Panel Admina)
+    const [user] = await db.select().from(s.users)
+      .where(eq(s.users.companyId, BigInt(ctx.companyId)))
+      .orderBy(sql`CASE WHEN role = 'admin' THEN 1 ELSE 2 END`)
+      .limit(1);
+    return user || { id: 1, email: "demo@localhost", name: "Demo User", userRole: "manager", role: "admin" };
   }),
 
 });
