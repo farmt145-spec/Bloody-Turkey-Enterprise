@@ -139,7 +139,7 @@ function BatchDetail({ id, onBack }: { id: number; onBack: () => void }) {
           <h3 className="mb-2 font-semibold">Ekonomika partii (PLN)</h3>
           <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
             <div>Pisklęta: <b>{fmt(d.economics.chickCost, 0)}</b></div>
-            <div>Pasza (est. {fmt(d.avgFeedPricePerTon, 0)}/t): <b>{fmt(d.economics.feedCost, 0)}</b></div>
+            <div>Pasza{d.avgFeedPricePerTon != null ? ` (${fmt(d.avgFeedPricePerTon, 0)}/t)` : ""}: <b>{fmt(d.economics.feedCost, 0)}</b></div>
             <div>Transport: <b>{fmt(d.economics.transportCost, 0)}</b></div>
             <div>Koszt razem: <b>{fmt(d.economics.totalCost, 0)}</b></div>
             <div>Przychód netto: <b>{d.economics.revenueNet != null ? fmt(d.economics.revenueNet, 0) : "—"}</b></div>

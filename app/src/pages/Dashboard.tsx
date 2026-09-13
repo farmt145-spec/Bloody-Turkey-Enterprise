@@ -1,7 +1,7 @@
 import { useMemo, lazy, Suspense } from "react";
 import { trpc } from "@/providers/trpc";
 import { fmtNum, fmtTons, countryFlag, countryName } from "@/lib/geo";
-import { Bird, Scale, Gauge, Skull, TrendingUp, Warehouse, Globe2, AlertTriangle, Flame } from "lucide-react";
+import { Bird, Scale, Gauge, Skull, TrendingUp, Warehouse, Globe2, AlertTriangle, Flame, Factory } from "lucide-react";
 import { Link } from "react-router";
 
 /* Mapa ładowana leniwie — brak paczki nie wywraca całego dashboardu */
@@ -26,6 +26,7 @@ export default function Dashboard() {
   const kpis = trpc.farm.dashboard.kpis.useQuery();
   const mapData = trpc.farm.dashboard.mapData.useQuery();
   const alerts = trpc.farm.dashboard.alerts.useQuery();
+  const slaughter = trpc.slaughter.dashboard.useQuery();
 
   const maxBirds = useMemo(
     () => Math.max(1, ...(mapData.data ?? []).map((f) => f.activeBirds)),
@@ -51,6 +52,8 @@ export default function Dashboard() {
         <KpiCard icon={Warehouse} label="Fermy" value={k ? String(k.farmsCount) : "…"} sub={`${k?.countriesCount ?? "…"} krajów Europy`} />
         <KpiCard icon={Globe2} label="Zasięg" value={k ? `${k.countriesCount}` : "…"} sub="kraje UE + UK" accent />
         <KpiCard icon={Flame} label="Alerty" value={alerts.data ? String(alerts.data.length) : "…"} sub="wymagają uwagi" />
+        <KpiCard icon={Factory} label="Ubój — żywiec" value={slaughter.data ? fmtTons(slaughter.data.liveWeightKg / 1000) : "…"} sub={`${slaughter.data?.totalSlaughterBatches ?? 0} partii`} />
+        <KpiCard icon={TrendingUp} label="Rozliczenia uboju" value={slaughter.data ? `${fmtNum(slaughter.data.revenueNet, 0)} PLN` : "…"} sub={`wydajność śr. ${slaughter.data?.avgYieldPct?.toFixed(1) ?? "—"}%`} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">

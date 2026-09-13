@@ -194,15 +194,25 @@ export const feedProgramRouter = createRouter({
       if (!silo) throw new Error("Silos nie istnieje");
       if (num(silo.currentTons) * 1000 < input.kg)
         throw new Error(`Za mało paszy w silosie: dostępne ${fmt(num(silo.currentTons) * 1000)} kg, żądane ${input.kg} kg`);
+      const recipeId = input.recipeId ?? silo.recipeId;
+      const [recipe] = recipeId
+        ? await db.select().from(s.recipes).where(eq(s.recipes.id, recipeId))
+        : [null];
       await db.transaction(async (tx) => {
         await tx.update(s.silos)
           .set({ currentTons: ((num(silo.currentTons) * 1000 - input.kg) / 1000).toFixed(2) })
           .where(eq(s.silos.id, input.siloId));
         await tx.insert(s.feedDeliveries).values({
           siloId: input.siloId, batchId: input.batchId, day: input.day,
-          kg: input.kg.toFixed(1), recipeId: input.recipeId ?? silo.recipeId,
+          kg: input.kg.toFixed(1), recipeId,
         });
-        await tx.insert(s.feedUsages).values({ batchId: input.batchId, day: input.day, kg: input.kg.toFixed(1), recipeId: input.recipeId ?? silo.recipeId });
+        await tx.insert(s.feedUsages).values({ batchId: input.batchId, day: input.day, kg: input.kg.toFixed(1), recipeId });
+        if (recipe) await tx.insert(s.costs).values({
+          batchId: input.batchId, category: "feed",
+          amount: ((input.kg / 1000) * num(recipe.costPerTon)).toFixed(2),
+          currency: recipe ? "PLN" : "EUR", day: input.day,
+          note: `Wydanie paszy: ${recipe.name}`,
+        });
       });
       await audit("feed_deliveries", input.siloId, "create", { newValues: input });
       return { ok: true };

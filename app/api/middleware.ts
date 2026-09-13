@@ -7,10 +7,14 @@ const t = initTRPC.context<TrpcContext>().create({
 });
 
 export const createRouter = t.router;
-export const publicQuery = t.procedure;
+/** Endpoints available before logowanie (wyłącznie rejestracja i logowanie). */
+export const anonymousQuery = t.procedure;
 
-// Protected: wymaga JWT tokena
-export const protectedQuery = t.procedure.use(({ ctx, next }) => {
+// Domyślna procedura API: cała aplikacja biznesowa wymaga JWT.
+// Nazwa została zachowana, aby nie rozbijać istniejących routerów.
+export const publicQuery = t.procedure.use(({ ctx, next }) => {
   if (!ctx.userId) throw new Error("Unauthorized");
   return next();
 });
+
+export const protectedQuery = publicQuery;

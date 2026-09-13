@@ -1,12 +1,7 @@
-import { useState } from "react";
 import { useNavigate } from "react-router";
 import { trpc } from "@/providers/trpc";
 import { setWorkspace } from "@/lib/workspace";
-import { Bird, Building2, Plus, MapPin, Home } from "lucide-react";
-import { toast } from "sonner";
-
-const inputCls =
-  "w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-emerald-500";
+import { Bird, Building2, MapPin, Home } from "lucide-react";
 
 type Company = {
   id: number; name: string; isDemo: boolean; address: string | null; contact: string | null;
@@ -15,20 +10,7 @@ type Company = {
 
 export default function FarmSelect() {
   const nav = useNavigate();
-  const utils = trpc.useUtils();
   const q = trpc.workspace.companies.useQuery();
-  const create = trpc.workspace.createCompany.useMutation({
-    onSuccess: async (r) => {
-      toast.success("Firma utworzona — czyste środowisko gotowe");
-      setWorkspace({ companyId: r.companyId, farmId: r.farmId, companyName: form.name, farmName: "Gospodarstwo 1", isDemo: false });
-      await utils.invalidate();
-      nav("/");
-    },
-    onError: (e) => toast.error(e.message),
-  });
-
-  const [formOpen, setFormOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", address: "", nip: "", contact: "", declaredHouses: 0, useDemoTemplate: false });
 
   const companies = (q.data ?? []) as unknown as Company[];
   const demos = companies.filter((c) => c.isDemo);
@@ -76,7 +58,7 @@ export default function FarmSelect() {
             <Bird className="h-9 w-9" />
           </div>
           <h1 className="text-2xl font-bold tracking-wide">BLOODY TURKEY <span className="text-emerald-400">ENTERPRISE</span></h1>
-          <p className="mt-1 text-sm text-zinc-500">Wybierz gospodarstwo, aby rozpocząć pracę — bez logowania</p>
+          <p className="mt-1 text-sm text-zinc-500">Wybierz swoją firmę lub środowisko demonstracyjne Indykpol</p>
         </div>
 
         {own.length > 0 && (
@@ -91,45 +73,7 @@ export default function FarmSelect() {
         <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-zinc-500">Gospodarstwa demonstracyjne</h2>
         <div className="grid gap-3 sm:grid-cols-2">
           {demos.map((c) => <CompanyCard key={c.id} c={c} demo />)}
-
-          <button onClick={() => setFormOpen(!formOpen)}
-            className="flex min-h-20 items-center justify-center gap-2 rounded-xl border border-dashed border-emerald-700/60 bg-emerald-950/20 p-4 font-semibold text-emerald-400 transition hover:bg-emerald-950/40">
-            <Plus className="h-5 w-5" /> DODAJ WŁASNĄ FIRMĘ
-          </button>
         </div>
-
-        {formOpen && (
-          <form
-            className="mt-4 space-y-3 rounded-xl border border-zinc-800 bg-zinc-900 p-5"
-            onSubmit={(e) => { e.preventDefault(); create.mutate(form); }}
-          >
-            <h3 className="font-semibold">Nowa firma</h3>
-            <input className={inputCls} placeholder="Nazwa firmy *" value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })} required minLength={2} />
-            <input className={inputCls} placeholder="Adres" value={form.address}
-              onChange={(e) => setForm({ ...form, address: e.target.value })} />
-            <div className="grid grid-cols-2 gap-3">
-              <input className={inputCls} placeholder="NIP (opcjonalnie)" value={form.nip}
-                onChange={(e) => setForm({ ...form, nip: e.target.value })} />
-              <input className={inputCls} placeholder="Kontakt (tel./e-mail)" value={form.contact}
-                onChange={(e) => setForm({ ...form, contact: e.target.value })} />
-            </div>
-            <label className="block text-xs text-zinc-500">
-              Liczba kurników
-              <input type="number" min={0} max={500} className={`${inputCls} mt-1`} value={form.declaredHouses}
-                onChange={(e) => setForm({ ...form, declaredHouses: Number(e.target.value) })} />
-            </label>
-            <label className="flex items-center gap-2 text-sm text-zinc-300">
-              <input type="checkbox" checked={form.useDemoTemplate}
-                onChange={(e) => setForm({ ...form, useDemoTemplate: e.target.checked })} />
-              Utwórz na podstawie szablonu DEMO (2 przykładowe kurniki, bez danych testowych)
-            </label>
-            <button disabled={create.isPending}
-              className="w-full rounded-lg bg-emerald-600 py-2.5 font-semibold text-white hover:bg-emerald-500 disabled:opacity-50">
-              {create.isPending ? "Tworzenie…" : "Utwórz firmę i wejdź do systemu"}
-            </button>
-          </form>
-        )}
 
         {q.isLoading && <p className="mt-6 text-center text-sm text-zinc-500">Ładowanie gospodarstw…</p>}
         {q.error && <p className="mt-6 text-center text-sm text-red-400">Błąd połączenia z serwerem: {q.error.message}</p>}

@@ -4,6 +4,8 @@ import { getDb } from "./queries/connection";
 import * as s from "@db/schema";
 import { eq, and, desc, sql, gt, or } from "drizzle-orm";
 import { audit } from "./audit";
+import { assertBatchAccess, requireCompanyId } from "./tenant";
+import { computeEconomics, computeSettlement, computeYieldPct, planVsReality } from "./slaughter-calc";
 
 export const slaughterRouter = createRouter({
   /* ------- dashboard ------- */
@@ -88,20 +90,50 @@ export const slaughterRouter = createRouter({
     .input(z.object({ id: z.number() }))
     .query(async ({ input, ctx }) => {
       const db = getDb();
-      const [batch] = await db.select().from(s.slaughterBatches).where(eq(s.slaughterBatches.id, input.id));
+      const [batch] = await db.select().from(s.slaughterBatches).where(and(
+        eq(s.slaughterBatches.id, input.id), eq(s.slaughterBatches.companyId, BigInt(requireCompanyId(ctx))),
+      ));
       if (!batch) return null;
 
-      const [plan] = await db.select().from(s.slaughterPlans).where(eq(s.slaughterPlans.id, BigInt(batch.id)));
+      const [plan] = batch.planId
+        ? await db.select().from(s.slaughterPlans).where(eq(s.slaughterPlans.id, batch.planId)) : [null];
       const [prod] = batch.batchId ? await db.select().from(s.batches).where(eq(s.batches.id, batch.batchId)) : [null];
       const farm = batch.farmId ? (await db.select().from(s.farms).where(eq(s.farms.id, batch.farmId)))[0] : null;
       const house = prod?.houseId ? (await db.select().from(s.houses).where(eq(s.houses.id, prod.houseId)))[0] : null;
       
-      const transports = await db.select().from(s.slaughterTransports).where(eq(s.slaughterTransports.slaughterBatchId, BigInt(batch.id)));
+      const transports = await db.select().from(s.transports).where(eq(s.transports.slaughterBatchId, BigInt(batch.id)));
       const [reception] = await db.select().from(s.slaughterReceptions).where(eq(s.slaughterReceptions.slaughterBatchId, BigInt(batch.id)));
       const [result] = await db.select().from(s.slaughterResults).where(eq(s.slaughterResults.slaughterBatchId, BigInt(batch.id)));
-      const classifications = await db.select().from(s.slaughterClassifications).where(eq(s.slaughterClassifications.slaughterBatchId, BigInt(batch.id)));
+      const classifications = await db.select().from(s.carcassClassifications).where(eq(s.carcassClassifications.slaughterBatchId, BigInt(batch.id)));
       const [settlement] = await db.select().from(s.slaughterSettlements).where(eq(s.slaughterSettlements.slaughterBatchId, BigInt(batch.id)));
       const events = await db.select().from(s.slaughterEvents).where(eq(s.slaughterEvents.slaughterBatchId, BigInt(batch.id))).orderBy(desc(s.slaughterEvents.createdAt));
+
+      const [costRows, feedRows, recipes] = prod
+        ? await Promise.all([
+          db.select().from(s.costs).where(eq(s.costs.batchId, prod.id)),
+          db.select().from(s.feedUsages).where(eq(s.feedUsages.batchId, prod.id)),
+          db.select().from(s.recipes),
+        ]) : [[], [], []] as const;
+      const num = (value: unknown) => Number(value ?? 0);
+      const feedCostFromUsage = feedRows.reduce((sum, row) => {
+        const recipe = recipes.find((r) => r.id === row.recipeId);
+        return sum + (num(row.kg) / 1000) * num(recipe?.costPerTon);
+      }, 0);
+      const explicitFeedCost = costRows.filter((x) => x.category === "feed").reduce((sum, x) => sum + num(x.amount), 0);
+      const otherCosts = costRows.filter((x) => !["chicks", "feed", "transport"].includes(x.category))
+        .reduce((sum, x) => sum + num(x.amount), 0);
+      const transportCost = transports.reduce((sum, row) => sum + num(row.transportCost), 0);
+      const economics = prod && reception ? computeEconomics({
+        initialCount: prod.initialCount,
+        chickPrice: num(prod.chickPrice),
+        feedKg: feedRows.reduce((sum, row) => sum + num(row.kg), 0),
+        // Gdy nie było rejestru wydań, używamy ręcznie zaksięgowanego kosztu paszy.
+        feedPricePerTon: feedRows.length > 0 ? (feedCostFromUsage * 1000) / Math.max(feedRows.reduce((sum, row) => sum + num(row.kg), 0), 1) : 0,
+        transportCost,
+        otherCosts: otherCosts + (feedRows.length === 0 ? explicitFeedCost : 0),
+        revenueNet: settlement ? num(settlement.netAmount) : null,
+        liveWeightKg: num(reception.liveWeightKg),
+      }) : null;
 
       return {
         slaughterBatch: batch,
@@ -115,24 +147,13 @@ export const slaughterRouter = createRouter({
         classification: classifications,
         settlement,
         events,
-        planVsReality: result && reception && plan ? {
-          countPct: plan.plannedCount ? Math.round((reception.receivedCount / plan.plannedCount) * 100) : null,
-          avgLiveWeightKg: reception.receivedCount ? (parseFloat(reception.liveWeightKg?.toString() || "0") / reception.receivedCount).toFixed(2) : null,
-          weightTargetDiff: plan.targetAvgWeightKg ? (parseFloat(reception.liveWeightKg?.toString() || "0") / reception.receivedCount - parseFloat(plan.targetAvgWeightKg.toString())).toFixed(2) : null,
-          yieldPct: result.yieldPct,
-          daysVsPlan: Math.floor((new Date(result.slaughteredAt || new Date()).getTime() - new Date(plan.plannedDate).getTime()) / 86400000),
-        } : null,
-        economics: result && reception ? {
-          chickCost: (prod?.chicksPrice || 0) * (prod?.count || 0),
-          feedCost: 0, // TODO: sum from production
-          transportCost: transports.reduce((a, t) => a + (parseFloat(t.transportCost?.toString() || "0")), 0),
-          totalCost: (prod?.chicksPrice || 0) * (prod?.count || 0) + transports.reduce((a, t) => a + (parseFloat(t.transportCost?.toString() || "0")), 0),
-          revenueNet: settlement?.netAmount ? parseFloat(settlement.netAmount.toString()) : null,
-          margin: settlement ? parseFloat(settlement.netAmount?.toString() || "0") - ((prod?.chicksPrice || 0) * (prod?.count || 0)) : null,
-          roiPct: settlement ? Math.round(((parseFloat(settlement.netAmount?.toString() || "0") - ((prod?.chicksPrice || 0) * (prod?.count || 0))) / ((prod?.chicksPrice || 0) * (prod?.count || 0))) * 100) : null,
-          costPerKgLive: reception.liveWeightKg ? ((prod?.chicksPrice || 0) * (prod?.count || 0)) / parseFloat(reception.liveWeightKg.toString()) : null,
-        } : null,
-        avgFeedPricePerTon: 2800,
+        planVsReality: result && reception && plan ? planVsReality({
+          plannedDate: plan.plannedDate, plannedCount: plan.plannedCount, targetAvgWeightKg: num(plan.targetAvgWeightKg),
+          actualCount: reception.receivedCount, liveWeightKg: num(reception.liveWeightKg),
+          carcassWeightKg: num(result.carcassWeightKg), yieldPct: num(result.yieldPct), slaughteredAt: result.slaughteredAt,
+        }) : null,
+        economics,
+        avgFeedPricePerTon: feedRows.length ? Number(((feedCostFromUsage * 1000) / feedRows.reduce((sum, row) => sum + num(row.kg), 0)).toFixed(2)) : null,
       };
     }),
 
@@ -157,21 +178,30 @@ export const slaughterRouter = createRouter({
   /* ------- słownik klas ------- */
   classDict: publicQuery.query(async ({ ctx }) => {
     const db = getDb();
-    return db.select().from(s.slaughterClassDict)
-      .where(ctx.companyId ? or(eq(s.slaughterClassDict.companyId, BigInt(ctx.companyId)), eq(s.slaughterClassDict.companyId, null)) : undefined)
-      .orderBy(s.slaughterClassDict.sortOrder);
+    return db.select().from(s.carcassClassDict)
+      .where(ctx.companyId ? or(eq(s.carcassClassDict.companyId, BigInt(ctx.companyId)), eq(s.carcassClassDict.companyId, null)) : undefined)
+      .orderBy(s.carcassClassDict.sortOrder);
   }),
 
   /* ------- tworzenie partii ubojowej ------- */
   createBatch: publicQuery
-    .input(z.object({ batchId: z.number(), plannedDate: z.string().optional() }))
+    .input(z.object({ batchId: z.number(), planId: z.number().optional() }))
     .mutation(async ({ input, ctx }) => {
       const db = getDb();
       if (!ctx.companyId || !ctx.farmId) throw new Error("Brak farmId");
 
       const code = `UB-${String(ctx.farmId).padStart(4, "0")}-${String(Date.now()).slice(-6)}`;
+      await assertBatchAccess(ctx, input.batchId);
+      if (input.planId) {
+        const [plan] = await db.select().from(s.slaughterPlans).where(and(
+          eq(s.slaughterPlans.id, input.planId), eq(s.slaughterPlans.batchId, input.batchId),
+          eq(s.slaughterPlans.companyId, ctx.companyId),
+        ));
+        if (!plan) throw new Error("Plan uboju nie należy do wybranego stada");
+      }
       const [{ id }] = await db.insert(s.slaughterBatches).values({
         code,
+        planId: input.planId,
         companyId: BigInt(ctx.companyId),
         farmId: BigInt(ctx.farmId),
         batchId: BigInt(input.batchId),
@@ -189,6 +219,7 @@ export const slaughterRouter = createRouter({
       const db = getDb();
       if (!ctx.companyId || !ctx.farmId) throw new Error("Brak danych");
 
+      await assertBatchAccess(ctx, input.batchId);
       const [{ id }] = await db.insert(s.slaughterPlans).values({
         companyId: BigInt(ctx.companyId),
         farmId: BigInt(ctx.farmId),
@@ -206,9 +237,11 @@ export const slaughterRouter = createRouter({
   /* ------- transport ------- */
   addTransport: publicQuery
     .input(z.object({ slaughterBatchId: z.number(), vehiclePlate: z.string(), driverName: z.string(), loadedCount: z.number(), distanceKm: z.number().optional(), transportCost: z.number(), deadInTransport: z.number().optional() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const db = getDb();
-      const [{ id }] = await db.insert(s.slaughterTransports).values({
+      const [batch] = await db.select().from(s.slaughterBatches).where(and(eq(s.slaughterBatches.id, input.slaughterBatchId), eq(s.slaughterBatches.companyId, BigInt(requireCompanyId(ctx)))));
+      if (!batch) throw new Error("Nie znaleziono partii ubojowej");
+      const [{ id }] = await db.insert(s.transports).values({
         slaughterBatchId: BigInt(input.slaughterBatchId),
         vehiclePlate: input.vehiclePlate,
         driverName: input.driverName,
@@ -216,16 +249,22 @@ export const slaughterRouter = createRouter({
         distanceKm: input.distanceKm,
         transportCost: input.transportCost.toString(),
         deadInTransport: input.deadInTransport,
-        status: "completed",
       }).$returningId();
+      await db.insert(s.costs).values({
+        batchId: batch.batchId, category: "transport", amount: input.transportCost.toFixed(2),
+        currency: "PLN", day: new Date().toISOString().slice(0, 10),
+        note: `Transport do ubojni ${batch.code}`,
+      });
       return { id };
     }),
 
   /* ------- przyjęcie ------- */
   addReception: publicQuery
     .input(z.object({ slaughterBatchId: z.number(), receivedCount: z.number(), liveWeightKg: z.number(), deadOnArrival: z.number().optional(), rejectedCount: z.number().optional() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const db = getDb();
+      const [batch] = await db.select().from(s.slaughterBatches).where(and(eq(s.slaughterBatches.id, input.slaughterBatchId), eq(s.slaughterBatches.companyId, BigInt(requireCompanyId(ctx)))));
+      if (!batch) throw new Error("Nie znaleziono partii ubojowej");
       const [{ id }] = await db.insert(s.slaughterReceptions).values({
         slaughterBatchId: BigInt(input.slaughterBatchId),
         receivedCount: input.receivedCount,
@@ -239,13 +278,15 @@ export const slaughterRouter = createRouter({
   /* ------- wyniki uboju ------- */
   addResult: publicQuery
     .input(z.object({ slaughterBatchId: z.number(), carcassCount: z.number(), carcassWeightKg: z.number(), wasteKg: z.number().optional(), byproductsKg: z.number().optional() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const db = getDb();
+      const [owned] = await db.select().from(s.slaughterBatches).where(and(eq(s.slaughterBatches.id, input.slaughterBatchId), eq(s.slaughterBatches.companyId, BigInt(requireCompanyId(ctx)))));
+      if (!owned) throw new Error("Nie znaleziono partii ubojowej");
       
       const [reception] = await db.select().from(s.slaughterReceptions).where(eq(s.slaughterReceptions.slaughterBatchId, BigInt(input.slaughterBatchId)));
       if (!reception) throw new Error("Brak przyjęcia");
 
-      const yieldPct = reception.liveWeightKg ? Math.round((input.carcassWeightKg / parseFloat(reception.liveWeightKg.toString())) * 10000) / 100 : 0;
+      const yieldPct = computeYieldPct(input.carcassWeightKg, Number(reception.liveWeightKg));
 
       const [{ id }] = await db.insert(s.slaughterResults).values({
         slaughterBatchId: BigInt(input.slaughterBatchId),
@@ -263,13 +304,14 @@ export const slaughterRouter = createRouter({
   /* ------- klasyfikacja ------- */
   setClassification: publicQuery
     .input(z.object({ slaughterBatchId: z.number(), rows: z.array(z.object({ classCode: z.string(), count: z.number(), weightKg: z.number() })) }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const db = getDb();
-      
-      await db.delete(s.slaughterClassifications).where(eq(s.slaughterClassifications.slaughterBatchId, BigInt(input.slaughterBatchId)));
+      const [owned] = await db.select().from(s.slaughterBatches).where(and(eq(s.slaughterBatches.id, input.slaughterBatchId), eq(s.slaughterBatches.companyId, BigInt(requireCompanyId(ctx)))));
+      if (!owned) throw new Error("Nie znaleziono partii ubojowej");
+      await db.delete(s.carcassClassifications).where(eq(s.carcassClassifications.slaughterBatchId, BigInt(input.slaughterBatchId)));
       
       for (const row of input.rows) {
-        await db.insert(s.slaughterClassifications).values({
+        await db.insert(s.carcassClassifications).values({
           slaughterBatchId: BigInt(input.slaughterBatchId),
           classCode: row.classCode,
           count: row.count,
@@ -282,28 +324,39 @@ export const slaughterRouter = createRouter({
   /* ------- rozliczenie ------- */
   addSettlement: publicQuery
     .input(z.object({ slaughterBatchId: z.number(), pricePerKg: z.number(), bonuses: z.number().optional(), deductions: z.number().optional(), documentNumber: z.string().optional() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const db = getDb();
+      const [owned] = await db.select().from(s.slaughterBatches).where(and(eq(s.slaughterBatches.id, input.slaughterBatchId), eq(s.slaughterBatches.companyId, BigInt(requireCompanyId(ctx)))));
+      if (!owned) throw new Error("Nie znaleziono partii ubojowej");
       
       const [result] = await db.select().from(s.slaughterResults).where(eq(s.slaughterResults.slaughterBatchId, BigInt(input.slaughterBatchId)));
       if (!result) throw new Error("Brak wyników");
 
-      const carcassWeightKg = parseFloat(result.carcassWeightKg?.toString() || "0");
-      const gross = carcassWeightKg * input.pricePerKg;
-      const net = gross + (input.bonuses || 0) - (input.deductions || 0);
+      const settlement = computeSettlement({
+        carcassWeightKg: Number(result.carcassWeightKg), pricePerKg: input.pricePerKg,
+        bonuses: input.bonuses, deductions: input.deductions,
+      });
 
       const [{ id }] = await db.insert(s.slaughterSettlements).values({
         slaughterBatchId: BigInt(input.slaughterBatchId),
         pricePerKg: input.pricePerKg.toString(),
-        grossAmount: gross.toString(),
+        grossAmount: settlement.grossAmount.toString(),
         bonuses: (input.bonuses || 0).toString(),
         deductions: (input.deductions || 0).toString(),
-        netAmount: net.toString(),
+        netAmount: settlement.netAmount.toString(),
         currency: "PLN",
         documentNumber: input.documentNumber,
       }).$returningId();
+      // To samo rozliczenie zasila P&L produkcji — dzięki temu przychód
+      // z ubojni jest widoczny w module Ekonomia i na dashboardzie.
+      await db.insert(s.sales).values({
+        batchId: owned.batchId, day: new Date().toISOString().slice(0, 10),
+        birdCount: result.carcassCount, totalWeightKg: result.carcassWeightKg,
+        pricePerKg: (settlement.netAmount / Math.max(Number(result.carcassWeightKg), 1)).toFixed(3),
+        currency: "PLN", buyer: "Ubojnia",
+      });
 
-      return { id, netAmount: net };
+      return { id, netAmount: settlement.netAmount };
     }),
 
   /* ------- dodaj klasę do słownika ------- */
@@ -311,7 +364,7 @@ export const slaughterRouter = createRouter({
     .input(z.object({ code: z.string(), label: z.string(), sortOrder: z.number().optional() }))
     .mutation(async ({ input, ctx }) => {
       const db = getDb();
-      const [{ id }] = await db.insert(s.slaughterClassDict).values({
+      const [{ id }] = await db.insert(s.carcassClassDict).values({
         code: input.code,
         label: input.label,
         sortOrder: input.sortOrder ?? 0,
@@ -325,7 +378,7 @@ export const slaughterRouter = createRouter({
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
-      await db.delete(s.slaughterClassDict).where(eq(s.slaughterClassDict.id, input.id));
+      await db.delete(s.carcassClassDict).where(eq(s.carcassClassDict.id, input.id));
       return { ok: true };
     }),
 
@@ -451,4 +504,3 @@ export const slaughterRouter = createRouter({
     return { code, id: sbId };
   }),
 });
-

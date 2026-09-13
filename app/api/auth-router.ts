@@ -1,12 +1,12 @@
 import { z } from "zod";
-import { createRouter, publicQuery } from "./middleware";
+import { createRouter, anonymousQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import * as s from "@db/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { hashPassword, verifyPassword, generateToken } from "./auth-utils";
 
 export const authRouter = createRouter({
-  signup: publicQuery
+  signup: anonymousQuery
     .input(z.object({ 
       companyName: z.string().min(3),
       email: z.string().email(),
@@ -28,6 +28,11 @@ export const authRouter = createRouter({
       const farmResult = await db.insert(s.farms).values({
         companyId: BigInt(companyId),
         name: input.farmName,
+        countryCode: "PL",
+        city: "",
+        lat: "52.00000",
+        lng: "19.00000",
+        capacity: 0,
       });
       const farmId = farmResult.insertId;
       
@@ -35,6 +40,7 @@ export const authRouter = createRouter({
       
       const userResult = await db.insert(s.users).values({
         companyId: BigInt(companyId),
+        unionId: input.email.toLowerCase(),
         email: input.email,
         name: input.email.split("@")[0],
         userRole: "admin",
@@ -42,13 +48,67 @@ export const authRouter = createRouter({
         password: passwordHash,
       });
       const userId = userResult.insertId;
+
+      // Kopiujemy tylko konfigurację startową z Indykpolu. Nowa firma nie
+      // dziedziczy żadnych stad, kurników, dzienników ani danych handlowych.
+      const [template] = await db.select({ id: s.companies.id }).from(s.companies)
+        .where(sql`LOWER(${s.companies.name}) LIKE '%indykpol%'`).limit(1);
+      if (template) {
+        const sourceCompanyId = template.id;
+        const ingredients = await db.select().from(s.feedIngredients)
+          .where(eq(s.feedIngredients.companyId, sourceCompanyId));
+        const ingredientIds = new Map<number, number>();
+        for (const ingredient of ingredients) {
+          const { id, companyId: _companyId, createdAt, updatedAt, ...values } = ingredient;
+          const [{ id: newId }] = await db.insert(s.feedIngredients)
+            .values({ ...values, companyId }).$returningId();
+          ingredientIds.set(id, newId);
+        }
+
+        const recipes = await db.select().from(s.recipes).where(eq(s.recipes.companyId, sourceCompanyId));
+        const recipeItems = await db.select().from(s.recipeItems);
+        const recipeIds = new Map<number, number>();
+        for (const recipe of recipes) {
+          const { id, companyId: _companyId, createdAt, ...values } = recipe;
+          const [{ id: newId }] = await db.insert(s.recipes).values({ ...values, companyId }).$returningId();
+          recipeIds.set(id, newId);
+          for (const item of recipeItems.filter((x) => x.recipeId === id)) {
+            const ingredientId = ingredientIds.get(item.ingredientId);
+            if (ingredientId) await db.insert(s.recipeItems).values({ recipeId: newId, ingredientId, percent: item.percent });
+          }
+        }
+
+        const lines = await db.select().from(s.geneticLines).where(eq(s.geneticLines.companyId, sourceCompanyId));
+        const norms = await db.select().from(s.geneticLineNorms);
+        for (const line of lines) {
+          const { id, companyId: _companyId, createdAt, updatedAt, ...values } = line;
+          const [{ id: newLineId }] = await db.insert(s.geneticLines).values({ ...values, companyId }).$returningId();
+          for (const norm of norms.filter((x) => x.geneticLineId === id)) {
+            const { id: _id, geneticLineId: _lineId, createdAt: _createdAt, updatedAt: _updatedAt, ...normValues } = norm;
+            await db.insert(s.geneticLineNorms).values({ ...normValues, geneticLineId: newLineId });
+          }
+        }
+
+        const programs = await db.select().from(s.feedPrograms).where(eq(s.feedPrograms.companyId, sourceCompanyId));
+        const stages = await db.select().from(s.feedProgramStages);
+        for (const program of programs) {
+          const { id, companyId: _companyId, createdAt, updatedAt, ...values } = program;
+          const [{ id: newProgramId }] = await db.insert(s.feedPrograms).values({ ...values, companyId }).$returningId();
+          for (const stage of stages.filter((x) => x.programId === id)) {
+            const { id: _id, programId: _programId, recipeId, ...stageValues } = stage;
+            await db.insert(s.feedProgramStages).values({
+              ...stageValues, programId: newProgramId, recipeId: recipeId ? recipeIds.get(recipeId) ?? null : null,
+            });
+          }
+        }
+      }
       
       const token = generateToken(Number(userId), Number(companyId));
       
       return { companyId, farmId, userId, email: input.email, token, message: "✓ Konto założone" };
     }),
 
-  login: publicQuery
+  login: anonymousQuery
     .input(z.object({ email: z.string().email(), password: z.string() }))
     .query(async ({ input }) => {
       const db = getDb();
@@ -61,7 +121,7 @@ export const authRouter = createRouter({
       return { userId: user.id, companyId: user.companyId, farmId: farm?.id || null, email: user.email, name: user.name, userRole: user.userRole, token };
     }),
 
-  checkEmail: publicQuery
+  checkEmail: anonymousQuery
     .input(z.object({ email: z.string().email() }))
     .query(async ({ input }) => {
       const db = getDb();
@@ -69,4 +129,3 @@ export const authRouter = createRouter({
       return { exists: !!user };
     }),
 });
-

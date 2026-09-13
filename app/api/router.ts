@@ -1,7 +1,7 @@
 import { farmRouter } from "./farm-router";
 import { orgRouter } from "./org-router";
 import { dailyRouter, feedProgramRouter } from "./daily-router";
-import { createRouter, publicQuery } from "./middleware";
+import { createRouter, anonymousQuery } from "./middleware";
 import { erpRouter, notificationsRouter } from "./erp-router";
 import { analyticsRouter, aiRouter } from "./analytics-router";
 import { nutritionRouter } from "./nutrition-router";
@@ -18,7 +18,7 @@ import { adminRouter } from "./admin-router";
 import { authRouter } from "./auth-router";
 
 export const appRouter = createRouter({
-  ping: publicQuery.query(() => ({ ok: true, ts: Date.now() })),
+  ping: anonymousQuery.query(() => ({ ok: true, ts: Date.now() })),
   workspace: workspaceRouter,
   farm: farmRouter,
   org: orgRouter,

@@ -4,7 +4,7 @@
  * Wszystkie dane trwale w bazie (MySQL), izolowane per companyId/farmId.
  */
 import { z } from "zod";
-import { and, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, ne, or, sql } from "drizzle-orm";
 import { createRouter, publicQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import * as s from "@db/schema";
@@ -24,15 +24,22 @@ export async function ensureDemoFarms(): Promise<number> {
   for (const r of rows) {
     await db.update(s.companies).set({ status: "archived" }).where(eq(s.companies.id, r.id));
   }
+  // Jedyna współdzielona organizacja: czytelne dane pokazowe Indykpolu.
+  // Pozostałe firmy są widoczne wyłącznie właścicielowi konta.
+  await db.update(s.companies).set({ isDemo: true })
+    .where(eq(s.companies.name, "Indykpol S.A."));
   return rows.length;
 }
 
 export const workspaceRouter = createRouter({
   /** Lista firm wraz z gospodarstwami — ekran wyboru. Tworzy DEMO przy pierwszym wejściu. */
-  companies: publicQuery.query(async () => {
+  companies: publicQuery.query(async ({ ctx }) => {
     await ensureDemoFarms();
     const db = getDb();
-    const comps = await db.select().from(s.companies).where(ne(s.companies.status, "archived"));
+    const comps = await db.select().from(s.companies).where(and(
+      ne(s.companies.status, "archived"),
+      or(eq(s.companies.id, ctx.accountCompanyId ?? 0), eq(s.companies.isDemo, true)),
+    ));
     const farmRows = await db.select().from(s.farms).where(ne(s.farms.status, "archived"));
     const houseRows = await db.select({ farmId: s.houses.farmId, cnt: sql<number>`COUNT(*)` })
       .from(s.houses).where(ne(s.houses.status, "archived")).groupBy(s.houses.farmId);
@@ -108,13 +115,17 @@ export const workspaceRouter = createRouter({
   /** Walidacja wyboru — sprawdza spójność companyId/farmId przed ustawieniem kontekstu. */
   validateSelection: publicQuery
     .input(z.object({ companyId: z.number(), farmId: z.number() }))
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
       const db = getDb();
+      const [company] = await db.select().from(s.companies).where(and(
+        eq(s.companies.id, input.companyId),
+        or(eq(s.companies.id, ctx.accountCompanyId ?? 0), eq(s.companies.isDemo, true)),
+      )).limit(1);
+      if (!company) return { ok: false as const };
       const [farm] = await db.select().from(s.farms)
         .where(and(eq(s.farms.id, input.farmId), eq(s.farms.companyId, input.companyId), ne(s.farms.status, "archived")))
         .limit(1);
       if (!farm) return { ok: false as const };
-      const [company] = await db.select().from(s.companies).where(eq(s.companies.id, input.companyId)).limit(1);
       return { ok: true as const, farm, company };
     }),
 });
