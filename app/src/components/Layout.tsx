@@ -105,10 +105,11 @@ function FarmBadge() {
 }
 
 function NotificationBell() {
+  const w = getWorkspace();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const nav = useNavigate();
-  const q = trpc.notifications.list.useQuery(undefined, { refetchInterval: 30000 });
+  const q = trpc.notifications.list.useQuery(undefined, { refetchInterval: 30000, enabled: !!w });
   const markAll = trpc.notifications.markAllRead.useMutation({ onSuccess: () => q.refetch() });
   const markRead = trpc.notifications.markRead.useMutation({ onSuccess: () => q.refetch() });
   const utils = trpc.useUtils();
@@ -120,10 +121,11 @@ function NotificationBell() {
   const unread = (q.data ?? []).filter((n) => !n.read).length;
 
   useEffect(() => {
+    if (!w) return;
     scan.mutate();
     const t = setInterval(() => scan.mutate(), 5 * 60 * 1000);
     return () => clearInterval(t);
-  }, []);
+  }, [w]);
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
@@ -173,9 +175,10 @@ function NotificationBell() {
 }
 
 export default function Layout({ children }: { children: React.ReactNode }) {
-  // Query z enabled:false żeby nie blokował renderowania
-  const userQuery = trpc.admin.getCurrentUser.useQuery(undefined, { enabled: false });
-  trpc.admin.getCurrentUser.useQuery(); // Uruchom w tle, nie czekaj
+  const w = getWorkspace();
+  // Query z enabled:false żeby nie blokował renderowania — TYLKO jeśli jest workspace
+  const userQuery = trpc.admin.getCurrentUser.useQuery(undefined, { enabled: !!w && false });
+  if (w) trpc.admin.getCurrentUser.useQuery(); // Uruchom w tle, nie czekaj
   
   // Zawsze zwróć manager — Panel Admina będzie widoczny
   const userRole = "manager";
