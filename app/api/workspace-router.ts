@@ -28,29 +28,45 @@ export async function ensureDemoFarms(): Promise<number> {
   // Pozostałe firmy są widoczne wyłącznie właścicielowi konta.
   await db.update(s.companies).set({ isDemo: true })
     .where(eq(s.companies.name, "Indykpol S.A."));
+  
+  console.log("✓ ensureDemoFarms: marked Indykpol as demo");
   return rows.length;
 }
 
 export const workspaceRouter = createRouter({
   /** Lista firm wraz z gospodarstwami — ekran wyboru. Tworzy DEMO przy pierwszym wejściu. */
   companies: publicQuery.query(async ({ ctx }) => {
+    console.log(">> workspace.companies query started");
     await ensureDemoFarms();
     const db = getDb();
+    
     const comps = await db.select().from(s.companies).where(and(
       ne(s.companies.status, "archived"),
       or(eq(s.companies.id, ctx.accountCompanyId ?? 0), eq(s.companies.isDemo, true)),
     ));
+    
+    console.log(`✓ Found ${comps.length} companies`);
+    for (const c of comps) {
+      console.log(`  - ${c.name} (id=${c.id}, demo=${c.isDemo})`);
+    }
+    
     const farmRows = await db.select().from(s.farms).where(ne(s.farms.status, "archived"));
+    console.log(`✓ Found ${farmRows.length} farms`);
+    
     const houseRows = await db.select({ farmId: s.houses.farmId, cnt: sql<number>`COUNT(*)` })
       .from(s.houses).where(ne(s.houses.status, "archived")).groupBy(s.houses.farmId);
     const housesByFarm = new Map(houseRows.map((h) => [h.farmId, Number(h.cnt)]));
-    return comps
+    
+    const result = comps
       .map((c) => ({
         ...c,
         farms: farmRows.filter((f) => f.companyId === c.id)
           .map((f) => ({ ...f, housesCount: housesByFarm.get(f.id) ?? 0 })),
       }))
       .sort((a, b) => Number(a.isDemo) - Number(b.isDemo) || a.id - b.id);
+    
+    console.log(`✓ workspace.companies returning ${result.length} companies`);
+    return result;
   }),
 
   /** Własna firma — czyste środowisko albo struktura na podstawie szablonu DEMO. */
@@ -129,3 +145,4 @@ export const workspaceRouter = createRouter({
       return { ok: true as const, farm, company };
     }),
 });
+
