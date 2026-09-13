@@ -185,6 +185,16 @@ if (env.isProduction) {
   const { serveStaticFiles } = await import("./lib/vite");
   serveStaticFiles(app);
 
+  // Seed bazy na startup — wstawia indykpol + borek + demo data
+  try {
+    const { seed } = await import("../db/seed");
+    console.log("[Boot] Inicjalizacja bazy — uruchamianie seed...");
+    await seed();
+    console.log("[Boot] Seed ukończony — baza gotowa");
+  } catch (e) {
+    console.error("[Boot] Błąd seeda:", e instanceof Error ? e.message : String(e));
+  }
+
   const port = parseInt(process.env.PORT || "3000");
   serve({ fetch: app.fetch, port }, () => {
     console.log(`Server running on http://localhost:${port}/`);

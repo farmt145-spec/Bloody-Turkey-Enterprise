@@ -73,7 +73,7 @@ const VACCINES = [
   { v: "HE (choroba krwotoczna)", m: "woda pitna" },
 ];
 
-async function seed() {
+export async function seed() {
   const db = getDb();
   console.log("Czyszczenie...");
   const tables = [
@@ -373,7 +373,5 @@ async function seed() {
   }
 
   console.log(`Gotowe: firmy=${COMPANIES.length}, fermy=${FARMS.length}, rzuty=${batchSeq}`);
-  process.exit(0);
 }
 
-seed();
