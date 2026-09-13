@@ -81,6 +81,7 @@ app.post("/api/v1/ingest", async (c) => {
     if (!body || typeof body.type !== "string") return c.json({ ok: false, error: "Wymagane pole type" }, 400);
 
     const { getDb } = await import("./queries/connection");
+    const { sql } = await import("drizzle-orm");
     const s = await import("@db/schema");
     const db = getDb();
 
@@ -185,25 +186,26 @@ if (env.isProduction) {
   const { serveStaticFiles } = await import("./lib/vite");
   serveStaticFiles(app);
 
-  // SEED — tworzy demo data przy pierwszym uruchomieniu
+  // SEED — sprawdza czy baza jest pusta i seeduje demo data
   try {
-    console.log(">> Sprawdzam seed...");
-    const { seedAuth } = await import("./auth-utils");
-    await seedAuth?.();
+    console.log(">> Sprawdzam czy baza jest pusta...");
+    const { getDb } = await import("./queries/connection");
+    const { sql } = await import("drizzle-orm");
+    const s = await import("@db/schema");
+    const db = getDb();
+    const [result] = await db.select({ count: sql`COUNT(*)` }).from(s.companies);
+    const count = Number(result?.count ?? 0);
+    
+    if (count === 0) {
+      console.log(">> Baza pusta — uruchamiam seed...");
+      const { seed } = await import("../db/seed");
+      await seed();
+      console.log("✓ Seed ukończony");
+    } else {
+      console.log(`✓ Baza zawiera ${count} firm — seed pominiętny`);
+    }
   } catch (e) {
     console.error("⚠ Seed error:", e instanceof Error ? e.message : String(e));
-  }
-
-  // Jeśli SEED ma być pełny — uruchom seed.ts
-  const shouldRunFullSeed = process.env.RUN_SEED === "true";
-  if (shouldRunFullSeed) {
-    try {
-      console.log(">> Uruchamiam pełny seed...");
-      const { seed } = await import("../db/seed");
-      await seed?.();
-    } catch (e) {
-      console.error("⚠ Full seed error:", e instanceof Error ? e.message : String(e));
-    }
   }
 
   const port = parseInt(process.env.PORT || "3000");

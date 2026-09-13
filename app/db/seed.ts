@@ -373,7 +373,5 @@ async function seed() {
   }
 
   console.log(`Gotowe: firmy=${COMPANIES.length}, fermy=${FARMS.length}, rzuty=${batchSeq}`);
-  process.exit(0);
 }
-
-seed();
+export { seed };
