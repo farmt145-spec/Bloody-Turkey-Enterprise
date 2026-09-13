@@ -4,13 +4,13 @@
  * Wszystkie dane trwale w bazie (MySQL), izolowane per companyId/farmId.
  */
 import { z } from "zod";
-import { and, eq, inArray, ne, or, sql } from "drizzle-orm";
-import { createRouter, publicQuery } from "./middleware";
+import { and, eq, inArray, ne, or, sql, ilike } from "drizzle-orm";
+import { createRouter, publicQuery, anonymousQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import * as s from "@db/schema";
 import { audit } from "./audit";
 
-/** Jedna firma demonstracyjna: INDIKPOL — istniejące pełne dane DEMO.
+/** Jedna firma demonstracyjna: INDYKPOL — istniejące pełne dane DEMO.
     (Dawnych 5 małych gospodarstw DEMO nie tworzymy — archiwizujemy.) */
 export async function ensureDemoFarms(): Promise<number> {
   const db = getDb();
@@ -27,13 +27,13 @@ export async function ensureDemoFarms(): Promise<number> {
   // Jedyna współdzielona organizacja: czytelne dane pokazowe Indykpolu.
   // Pozostałe firmy są widoczne wyłącznie właścicielowi konta.
   await db.update(s.companies).set({ isDemo: true })
-    .where(eq(s.companies.name, "Indykpol S.A."));
+    .where(ilike(s.companies.name, "%indykpol%"));
   return rows.length;
 }
 
 export const workspaceRouter = createRouter({
   /** Lista firm wraz z gospodarstwami — ekran wyboru. Tworzy DEMO przy pierwszym wejściu. */
-  companies: publicQuery.query(async ({ ctx }) => {
+  companies: anonymousQuery.query(async ({ ctx }) => {
     await ensureDemoFarms();
     const db = getDb();
     const comps = await db.select().from(s.companies).where(and(
@@ -113,7 +113,7 @@ export const workspaceRouter = createRouter({
     }),
 
   /** Walidacja wyboru — sprawdza spójność companyId/farmId przed ustawieniem kontekstu. */
-  validateSelection: publicQuery
+  validateSelection: anonymousQuery
     .input(z.object({ companyId: z.number(), farmId: z.number() }))
     .query(async ({ input, ctx }) => {
       const db = getDb();
@@ -129,3 +129,4 @@ export const workspaceRouter = createRouter({
       return { ok: true as const, farm, company };
     }),
 });
+
