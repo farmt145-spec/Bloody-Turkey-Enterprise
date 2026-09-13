@@ -10,7 +10,6 @@ const app = new Hono<{ Bindings: HttpBindings }>();
 
 app.use(bodyLimit({ maxSize: 50 * 1024 * 1024 }));
 
-/* Upload plików (multipart) — zapis do /mnt/agents/output/uploads */
 app.post("/api/upload", async (c) => {
   const form = await c.req.formData();
   const file = form.get("file");
@@ -23,6 +22,7 @@ app.post("/api/upload", async (c) => {
   await writeFile(`${dir}/${name}`, Buffer.from(await file.arrayBuffer()));
   return c.json({ ok: true, url: `/uploads/${name}`, name: file.name, size: file.size });
 });
+
 app.get("/uploads/*", async (c) => {
   const { readFile } = await import("fs/promises");
   const path = `${env.uploadDir}/${c.req.path.replace(/^\/uploads\//, "")}`;
@@ -35,8 +35,7 @@ app.get("/uploads/*", async (c) => {
     return c.json({ error: "Not found" }, 404);
   }
 });
-/* Test połączenia dla komputerów kurnika — szybka weryfikacja klucza i łączności.
-   Przykład: curl -H "X-API-Key: KLUCZ" https://…/api/v1/ping */
+
 app.get("/api/v1/ping", async (c) => {
   try {
     const { verifyApiKey } = await import("./transfer-router");
@@ -49,12 +48,12 @@ app.get("/api/v1/ping", async (c) => {
   }
 });
 
-/* Walidacja zakresów odczytów — odrzuca błędne dane zanim trafią do bazy */
 const RANGES: Record<string, [number, number]> = {
   tempC: [-40, 80], humidityPct: [0, 100], co2Ppm: [0, 20000], ammoniaPpm: [0, 500],
   ventilationPct: [0, 100], kg: [0, 1000000], count: [0, 1000000],
   avgWeightG: [10, 40000], sampleSize: [1, 100000], dayAge: [0, 400],
 };
+
 function checkRanges(obj: Record<string, unknown>, fields: string[]): string | null {
   for (const f of fields) {
     const v = obj[f];
@@ -67,9 +66,6 @@ function checkRanges(obj: Record<string, unknown>, fields: string[]): string | n
   return null;
 }
 
-/* Ingest danych z komputerów/czujników/systemów zewnętrznych — autoryzacja kluczem API (nagłówek X-API-Key).
-   Pojedynczy odczyt:  {"type":"climate","houseId":1,"tempC":21.5}
-   Paczka odczytów:    {"type":"climate","readings":[{"houseId":1,"tempC":21.5},{"houseId":2,"tempC":22.1}]} */
 app.post("/api/v1/ingest", async (c) => {
   try {
     const { verifyApiKey } = await import("./transfer-router");
@@ -84,7 +80,6 @@ app.post("/api/v1/ingest", async (c) => {
     const s = await import("@db/schema");
     const db = getDb();
 
-    // pojedynczy odczyt albo paczka `readings` (maks. 200 na żądanie)
     const readings: Record<string, unknown>[] = Array.isArray(body.readings)
       ? body.readings.slice(0, 200)
       : [body];
@@ -176,6 +171,7 @@ app.use("/api/trpc/*", async (c) => {  return fetchRequestHandler({
     createContext,
   });
 });
+
 app.all("/api/*", (c) => c.json({ error: "Not Found" }, 404));
 
 export default app;
@@ -185,8 +181,113 @@ if (env.isProduction) {
   const { serveStaticFiles } = await import("./lib/vite");
   serveStaticFiles(app);
 
+  // INLINE SEED — kompletne seedowanie przy boot
+  try {
+    console.log(">> SEED: Czyszczenie i seedowanie bazy...");
+    const { getDb } = await import("./queries/connection");
+    const s = await import("@db/schema");
+    const db = getDb();
+
+    // Wyczyść tabele
+    const tables = [
+      s.auditLog, s.scheduleEvents, s.transfers, s.recipeItems,
+      s.recipes, s.silos, s.warehouses, s.litter, s.vaccinations,
+      s.treatments, s.sales, s.costs, s.feedUsages, s.mortalities,
+      s.selects, s.weighings, s.batches, s.sectors, s.houses,
+      s.farms, s.geneticLines, s.feedIngredients, s.companies,
+    ];
+    for (const t of tables) await db.delete(t);
+    console.log("✓ Tabele wyczyszczone");
+
+    // Seed: 3 firmy
+    const companies = [
+      { name: "Bloody Turkey Group S.A. (Demo)", cc: "PL", baseCurrency: "EUR" },
+      { name: "Indykpol S.A.", cc: "PL", baseCurrency: "EUR" },
+      { name: "Gospodarstwo Kowalski", cc: "PL", baseCurrency: "EUR" },
+    ];
+    const companyIds: number[] = [];
+    for (const c of companies) {
+      const [{ id }] = await db.insert(s.companies).values(c).$returningId();
+      companyIds.push(id);
+      console.log(`✓ Firma: ${c.name}`);
+    }
+
+    // Seed: 2 farmy dla firm 0 i 1
+    const farms = [
+      { companyId: companyIds[0], name: "Ferma Wielkopolska", countryCode: "PL", city: "Września", lat: "52.325", lng: "17.565", capacity: 120000 },
+      { companyId: companyIds[0], name: "Ferma Mazury", countryCode: "PL", city: "Olsztyn", lat: "53.778", lng: "20.48", capacity: 95000 },
+      { companyId: companyIds[1], name: "Ferma Olsztyńska 1", countryCode: "PL", city: "Olsztynek", lat: "53.583", lng: "20.285", capacity: 140000 },
+      { companyId: companyIds[2], name: "Kowalski — kurniki rodzinne", countryCode: "PL", city: "Żuromin", lat: "53.064", lng: "19.909", capacity: 18000 },
+    ];
+    const farmIds: number[] = [];
+    for (const f of farms) {
+      const [{ id }] = await db.insert(s.farms).values(f).$returningId();
+      farmIds.push(id);
+      console.log(`✓ Ferma: ${f.name}`);
+    }
+
+    // Seed: 2 obiekty na farmę (odchowalnia + kurnik)
+    for (const farmId of farmIds) {
+      const [{ id: h1 }] = await db.insert(s.houses).values({
+        farmId, name: "Odchowalnia A", houseType: "brooder", areaM2: "750", maxDensityKgM2: "25.0",
+      }).$returningId();
+      const [{ id: h2 }] = await db.insert(s.houses).values({
+        farmId, name: "Kurnik 1", houseType: "finisher", areaM2: "2000", maxDensityKgM2: "42.0",
+      }).$returningId();
+      console.log(`✓ Obiekty na fermę ${farmId}`);
+
+      // Seed: 1-2 partie na objetk
+      for (const houseId of [h1, h2]) {
+        const [{ id: batchId }] = await db.insert(s.batches).values({
+          houseId,
+          code: `RZ/2026/${Math.random().toString().slice(2, 5)}`,
+          geneticLine: "BUT Big 6",
+          sex: Math.random() > 0.5 ? "toms" : "hens",
+          chickSupplier: "Grelavi S.A.",
+          chickPrice: "1.55",
+          startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+          plannedEndDate: new Date(Date.now() + 50 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+          initialCount: Math.floor(Math.random() * 12000 + 8000),
+          currentCount: Math.floor(Math.random() * 12000 + 7500),
+          status: "active",
+        }).$returningId();
+        console.log(`✓ Partia ${batchId}`);
+
+        // Seed: 3 ważenia na partię
+        for (let day = 7; day <= 21; day += 7) {
+          await db.insert(s.weighings).values({
+            batchId,
+            weighedAt: new Date(Date.now() - (30 - day) * 24 * 60 * 60 * 1000),
+            dayAge: day,
+            sampleSize: 50,
+            avgWeightG: Math.floor(50 + day * 80),
+            operator: "seed",
+          });
+        }
+        console.log(`✓ Ważenia dla partii ${batchId}`);
+
+        // Seed: 3 śmiertelności na partię
+        for (let i = 1; i <= 3; i++) {
+          await db.insert(s.mortalities).values({
+            batchId,
+            day: new Date(Date.now() - (30 - i * 5) * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+            count: Math.floor(Math.random() * 50 + 10),
+            cause: "różne",
+          });
+        }
+        console.log(`✓ Śmiertelności dla partii ${batchId}`);
+      }
+    }
+
+    console.log("✓✓✓ SEED KOMPLETNY — Baza gotowa do użytku!");
+  } catch (e) {
+    console.error("⚠⚠⚠ SEED ERROR:", e instanceof Error ? e.message : String(e));
+    console.error(e);
+  }
+
   const port = parseInt(process.env.PORT || "3000");
   serve({ fetch: app.fetch, port }, () => {
     console.log(`Server running on http://localhost:${port}/`);
   });
 }
+
