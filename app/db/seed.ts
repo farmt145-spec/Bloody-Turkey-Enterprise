@@ -11,6 +11,7 @@ const pick = <T>(arr: T[]) => arr[Math.floor(rnd() * arr.length)];
 
 function daysAgo(n: number) { const d = new Date(); d.setDate(d.getDate() - n); return d; }
 function dateStr(d: Date) { return d.toISOString().slice(0, 10); }
+function uuid() { return `${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2)}`; }
 
 const COMPANIES = [
   { name: "Bloody Turkey Group S.A. (Demo)", cc: "PL" },
@@ -81,7 +82,7 @@ export async function seed() {
     schema.recipes, schema.silos, schema.warehouses, schema.litter, schema.vaccinations,
     schema.treatments, schema.sales, schema.costs, schema.feedUsages, schema.mortalities,
     schema.selects, schema.weighings, schema.batches, schema.sectors, schema.houses,
-    schema.farms, schema.geneticLines, schema.feedIngredients, schema.companies,
+    schema.farms, schema.geneticLines, schema.feedIngredients, schema.companies, schema.users,
   ];
   for (const t of tables) await db.delete(t);
 
@@ -92,6 +93,27 @@ export async function seed() {
       .values({ name: c.name, countryCode: c.cc, baseCurrency: "EUR" }).$returningId();
     companyIds.push(id);
     await db.insert(schema.auditLog).values({ tableName: "companies", recordId: id, action: "create", newValues: { name: c.name }, author: "seed" });
+  }
+
+  console.log("Użytkownicy...");
+  const adminCredentials = [
+    { company: 0, email: "admin@bloody-turkey-demo.pl", password: "demo123456", name: "Admin Demo" },
+    { company: 1, email: "admin@indykpol.pl", password: "indykpol2024", name: "Admin Indykpol" },
+    { company: 2, email: "admin@kowalski.pl", password: "kowalski2024", name: "Admin Kowalski" },
+  ];
+  
+  for (const cred of adminCredentials) {
+    // Bez hashowania — seedem dodajemy plain text (dla dev/demo)
+    await db.insert(schema.users).values({
+      unionId: uuid(),
+      companyId: companyIds[cred.company],
+      email: cred.email,
+      name: cred.name,
+      password: cred.password,
+      role: "admin",
+      userRole: "admin",
+    }).$returningId();
+    console.log(`  ✓ ${cred.email}`);
   }
 
   console.log("Linie genetyczne...");
@@ -372,6 +394,6 @@ export async function seed() {
     }
   }
 
-  console.log(`Gotowe: firmy=${COMPANIES.length}, fermy=${FARMS.length}, rzuty=${batchSeq}`);
+  console.log(`Gotowe: firmy=${COMPANIES.length}, fermy=${FARMS.length}, rzuty=${batchSeq}, użytkownicy=3`);
 }
 
