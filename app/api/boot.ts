@@ -185,8 +185,39 @@ if (env.isProduction) {
   const { serveStaticFiles } = await import("./lib/vite");
   serveStaticFiles(app);
 
+  // SEED — czyści bazę i seeduje demo data
+  try {
+    console.log(">> Czyścimy bazę i seedujemy...");
+    const { getDb } = await import("./queries/connection");
+    const { sql } = await import("drizzle-orm");
+    const s = await import("@db/schema");
+    const db = getDb();
+
+    // Wyczyść wszystkie tabele
+    const tables = [
+      s.auditLog, s.scheduleEvents, s.transfers, s.recipeItems,
+      s.recipes, s.silos, s.warehouses, s.litter, s.vaccinations,
+      s.treatments, s.sales, s.costs, s.feedUsages, s.mortalities,
+      s.selects, s.weighings, s.batches, s.sectors, s.houses,
+      s.farms, s.geneticLines, s.feedIngredients, s.companies,
+    ];
+
+    for (const t of tables) {
+      await db.delete(t);
+    }
+    console.log("✓ Baza wyczyszczona");
+
+    // Seeduj
+    const { seed } = await import("../db/seed");
+    await seed();
+    console.log("✓ Seed ukończony");
+  } catch (e) {
+    console.error("⚠ Seed error:", e instanceof Error ? e.message : String(e));
+  }
+
   const port = parseInt(process.env.PORT || "3000");
   serve({ fetch: app.fetch, port }, () => {
     console.log(`Server running on http://localhost:${port}/`);
   });
 }
+
