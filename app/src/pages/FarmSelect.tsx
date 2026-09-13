@@ -2,6 +2,7 @@ import { useNavigate } from "react-router";
 import { trpc } from "@/providers/trpc";
 import { setWorkspace } from "@/lib/workspace";
 import { Bird, Building2, MapPin, Home } from "lucide-react";
+import { useEffect } from "react";
 
 type Company = {
   id: number; name: string; isDemo: boolean; address: string | null; contact: string | null;
@@ -12,16 +13,33 @@ export default function FarmSelect() {
   const nav = useNavigate();
   const q = trpc.workspace.companies.useQuery();
 
+  // DEBUG LOGGING
+  useEffect(() => {
+    console.log("🔍 FarmSelect mounted");
+    console.log("  query status:", q.status);
+    console.log("  isLoading:", q.isLoading);
+    console.log("  isError:", q.isError);
+    console.log("  data:", q.data);
+    console.log("  error:", q.error);
+  }, [q.status, q.isLoading, q.data, q.error]);
+
   const companies = (q.data ?? []) as unknown as Company[];
+  console.log("📊 Companies count:", companies.length);
+  
   const demos = companies.filter((c) => c.isDemo);
   const own = companies.filter((c) => !c.isDemo);
 
+  console.log("  demos:", demos.length, demos.map(c => c.name));
+  console.log("  own:", own.length, own.map(c => c.name));
+
   const pick = (c: Company, f: Company["farms"][number]) => {
+    console.log("✓ Picking farm:", c.name, f.name);
     setWorkspace({ companyId: c.id, farmId: f.id, companyName: c.name, farmName: f.name, isDemo: c.isDemo });
     nav("/");
   };
 
   const pickAll = (c: Company) => {
+    console.log("✓ Picking company:", c.name);
     setWorkspace({ companyId: c.id, farmId: 0, companyName: c.name, farmName: "wszystkie fermy", isDemo: c.isDemo });
     nav("/");
   };
@@ -72,12 +90,14 @@ export default function FarmSelect() {
 
         <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-zinc-500">Gospodarstwa demonstracyjne</h2>
         <div className="grid gap-3 sm:grid-cols-2">
-          {demos.map((c) => <CompanyCard key={c.id} c={c} demo />)}
+          {demos.length > 0 ? demos.map((c) => <CompanyCard key={c.id} c={c} demo />) : <p className="col-span-2 text-center text-sm text-zinc-500">Brak firm demonstracyjnych</p>}
         </div>
 
-        {q.isLoading && <p className="mt-6 text-center text-sm text-zinc-500">Ładowanie gospodarstw…</p>}
-        {q.error && <p className="mt-6 text-center text-sm text-red-400">Błąd połączenia z serwerem: {q.error.message}</p>}
+        {q.isLoading && <p className="mt-6 text-center text-sm text-zinc-500">⏳ Ładowanie gospodarstw…</p>}
+        {q.error && <p className="mt-6 text-center text-sm text-red-400">❌ Błąd połączenia z serwerem: {q.error.message}</p>}
+        {!q.isLoading && !q.error && companies.length === 0 && <p className="mt-6 text-center text-sm text-yellow-400">⚠️ Brak firm w bazie — seed nie uruchomił się?</p>}
       </div>
     </div>
   );
 }
+
