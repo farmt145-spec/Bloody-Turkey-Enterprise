@@ -5,7 +5,7 @@
  */
 import { z } from "zod";
 import { and, eq, inArray, ne, or, sql } from "drizzle-orm";
-import { createRouter, publicQuery } from "./middleware";
+import { createRouter, anonymousQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import * as s from "@db/schema";
 import { audit } from "./audit";
@@ -33,7 +33,7 @@ export async function ensureDemoFarms(): Promise<number> {
 
 export const workspaceRouter = createRouter({
   /** Lista firm wraz z gospodarstwami — ekran wyboru. Tworzy DEMO przy pierwszym wejściu. */
-  companies: publicQuery.query(async ({ ctx }) => {
+  companies: anonymousQuery.query(async ({ ctx }) => {
     await ensureDemoFarms();
     const db = getDb();
     const comps = await db.select().from(s.companies).where(and(
@@ -54,7 +54,7 @@ export const workspaceRouter = createRouter({
   }),
 
   /** Własna firma — czyste środowisko albo struktura na podstawie szablonu DEMO. */
-  createCompany: publicQuery
+  createCompany: anonymousQuery
     .input(z.object({
       name: z.string().min(2),
       address: z.string().max(255).optional(),
@@ -113,7 +113,7 @@ export const workspaceRouter = createRouter({
     }),
 
   /** Walidacja wyboru — sprawdza spójność companyId/farmId przed ustawieniem kontekstu. */
-  validateSelection: publicQuery
+  validateSelection: anonymousQuery
     .input(z.object({ companyId: z.number(), farmId: z.number() }))
     .query(async ({ input, ctx }) => {
       const db = getDb();
