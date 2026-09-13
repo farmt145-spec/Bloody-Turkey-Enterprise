@@ -185,8 +185,30 @@ if (env.isProduction) {
   const { serveStaticFiles } = await import("./lib/vite");
   serveStaticFiles(app);
 
+  // SEED — tworzy demo data przy pierwszym uruchomieniu
+  try {
+    console.log(">> Sprawdzam seed...");
+    const { seedAuth } = await import("./auth-utils");
+    await seedAuth?.();
+  } catch (e) {
+    console.error("⚠ Seed error:", e instanceof Error ? e.message : String(e));
+  }
+
+  // Jeśli SEED ma być pełny — uruchom seed.ts
+  const shouldRunFullSeed = process.env.RUN_SEED === "true";
+  if (shouldRunFullSeed) {
+    try {
+      console.log(">> Uruchamiam pełny seed...");
+      const { seed } = await import("../db/seed");
+      await seed?.();
+    } catch (e) {
+      console.error("⚠ Full seed error:", e instanceof Error ? e.message : String(e));
+    }
+  }
+
   const port = parseInt(process.env.PORT || "3000");
   serve({ fetch: app.fetch, port }, () => {
     console.log(`Server running on http://localhost:${port}/`);
   });
 }
+
