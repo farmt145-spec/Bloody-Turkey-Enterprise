@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createRouter, publicQuery } from "./middleware";
+import { createRouter, publicQuery, protectedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import * as s from "@db/schema";
 import { eq, desc, sql, and, ne, inArray } from "drizzle-orm";
@@ -59,7 +59,109 @@ export function kpisFromAgg(b: s.Batch, agg: Agg) {
   return { batch: b, lastWeighing: lastW ?? null, avgWeightG: avgG, ageDays, biomassKg, fcr, livability, adgG, epef, mortalityPct, feedKg, dead };
 }
 
-/* ---------------- pomocnicze KPI ---------------- */
+/* ================= ORGANIZACJA ================= */
+
+const orgRouter = createRouter({
+  placeholder: publicQuery.query(() => ({ ok: true })),
+});
+
+/* ================= PRODUKCJA ================= */
+
+const productionRouter = createRouter({
+  batches: protectedQuery.query(async ({ ctx }) => {
+    const db = getDb();
+    let ids = await scopedBatchIds(ctx);
+    if (ids.length === 0 && ctx.companyId && ctx.farmId) {
+      await ensureDemoData(BigInt(ctx.companyId), BigInt(ctx.farmId));
+      ids = await scopedBatchIds(ctx);
+    }
+    if (ids.length === 0) return [];
+    const [batchRows, houseRows, farmRows, agg] = await Promise.all([
+      db.select().from(s.batches).where(inArray(s.batches.id, ids)),
+      db.select().from(s.houses),
+      db.select().from(s.farms),
+      loadAggregates(ids),
+    ]);
+    return batchRows.map((b) => {
+      const k = kpisFromAgg(b, agg);
+      const house = houseRows.find((h) => h.id === b.houseId) ?? null;
+      const farm = house ? farmRows.find((f) => f.id === house.farmId) ?? null : null;
+      const density = house ? k.biomassKg / num(house.areaM2) : 0;
+      return { ...k, house, farm, densityKgM2: density };
+    });
+  }),
+
+  batchDetail: protectedQuery
+    .input(z.object({ id: z.number() }))
+    .query(async ({ input, ctx }) => {
+      const db = getDb();
+      await assertBatchAccess(ctx, input.id);
+      const k = await batchKpis(input.id);
+      if (!k) throw new Error("Rzut nie istnieje");
+      const weighings = await db.select().from(s.weighings)
+        .where(eq(s.weighings.batchId, input.id)).orderBy(s.weighings.dayAge);
+      const selects = await db.select().from(s.selects)
+        .where(eq(s.selects.batchId, input.id)).orderBy(desc(s.selects.createdAt));
+      const mortalities = await db.select().from(s.mortalities)
+        .where(eq(s.mortalities.batchId, input.id)).orderBy(s.mortalities.day);
+      const treatments = await db.select().from(s.treatments)
+        .where(eq(s.treatments.batchId, input.id)).orderBy(desc(s.treatments.startedAt));
+      const vaccinations = await db.select().from(s.vaccinations)
+        .where(eq(s.vaccinations.batchId, input.id)).orderBy(s.vaccinations.day);
+      const [house] = await db.select().from(s.houses).where(eq(s.houses.id, k.batch.houseId));
+      const [farm] = house ? await db.select().from(s.farms).where(eq(s.farms.id, house.farmId)) : [null];
+      return { ...k, weighings, selects, mortalities, treatments, vaccinations, house: house ?? null, farm: farm ?? null };
+    }),
+
+  addWeighing: protectedQuery
+    .input(z.object({
+      batchId: z.number(), dayAge: z.number().int().min(1),
+      sampleSize: z.number().int().min(1), avgWeightG: z.number().int().min(10),
+      stdDevG: z.number().int().optional(), minG: z.number().int().optional(),
+      maxG: z.number().int().optional(), operator: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const sd = input.stdDevG ?? Math.round(input.avgWeightG * 0.1);
+      const cv = (sd / input.avgWeightG) * 100;
+      const [{ id }] = await db.insert(s.weighings).values({
+        batchId: input.batchId, weighedAt: new Date(), dayAge: input.dayAge,
+        sampleSize: input.sampleSize, avgWeightG: input.avgWeightG,
+        medianG: input.avgWeightG, stdDevG: sd,
+        minG: input.minG ?? input.avgWeightG - 2 * sd,
+        maxG: input.maxG ?? input.avgWeightG + 2 * sd,
+        cv: cv.toFixed(2), operator: input.operator ?? "system",
+      }).$returningId();
+      await generateDynamicSelects(input.batchId, input.avgWeightG);
+      return { id, cv };
+    }),
+
+  addSelect: protectedQuery
+    .input(z.object({
+      batchId: z.number(), name: z.string().min(1), criteria: z.string(),
+      birdCount: z.number().int().min(1), avgWeightG: z.number().int().min(10),
+    }))
+    .mutation(async ({ input }) => {
+      const [{ id }] = await getDb().insert(s.selects).values({
+        batchId: input.batchId, name: input.name, criteria: input.criteria,
+        origin: "manual", birdCount: input.birdCount, avgWeightG: input.avgWeightG,
+        status: "ok",
+      }).$returningId();
+      return { id };
+    }),
+
+  regenerateSelects: protectedQuery
+    .input(z.object({ batchId: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const [lastW] = await db.select().from(s.weighings)
+        .where(eq(s.weighings.batchId, input.batchId))
+        .orderBy(desc(s.weighings.dayAge)).limit(1);
+      if (!lastW) throw new Error("Brak ważeń dla rzutu");
+      await generateDynamicSelects(input.batchId, lastW.avgWeightG);
+      return { ok: true };
+    }),
+});
 
 async function batchKpis(batchId: number) {
   const db = getDb();
@@ -84,7 +186,6 @@ async function batchKpis(batchId: number) {
   const fcr = feedKg / gainKg;
   const livability = b.initialCount > 0 ? ((b.initialCount - dead) / b.initialCount) * 100 : 100;
   const adgG = ageDays > 0 ? avgG / ageDays : 0;
-  // EPEF ma sens dopiero pod koniec odchowu
   const epef = ageDays >= 60 ? ((livability / 100) * (avgG / 1000) * 10000) / (ageDays * Math.max(fcr, 0.1)) : 0;
   const mortalityPct = b.initialCount > 0 ? (dead / b.initialCount) * 100 : 0;
   return {
@@ -94,119 +195,11 @@ async function batchKpis(batchId: number) {
   };
 }
 
-/* ================= ORGANIZACJA ================= */
-
-const orgRouter = createRouter({
-  // Struktura, tworzenie i edycja przeniesione do orgRouter (org.*)
-  placeholder: publicQuery.query(() => ({ ok: true })),
-});
-
-/* ================= PRODUKCJA ================= */
-
-const productionRouter = createRouter({
-  batches: publicQuery.query(async ({ ctx }) => {
-    const db = getDb();
-    let ids = await scopedBatchIds(ctx);
-    // Jeśli brak batchów, stwórz demo batch
-    if (ids.length === 0 && ctx.companyId && ctx.farmId) {
-      await ensureDemoData(BigInt(ctx.companyId), BigInt(ctx.farmId));
-      ids = await scopedBatchIds(ctx);
-    }
-    if (ids.length === 0) return [];
-    const [batchRows, houseRows, farmRows, agg] = await Promise.all([
-      db.select().from(s.batches).where(inArray(s.batches.id, ids)),
-      db.select().from(s.houses),
-      db.select().from(s.farms),
-      loadAggregates(ids),
-    ]);
-    return batchRows.map((b) => {
-      const k = kpisFromAgg(b, agg);
-      const house = houseRows.find((h) => h.id === b.houseId) ?? null;
-      const farm = house ? farmRows.find((f) => f.id === house.farmId) ?? null : null;
-      const density = house ? k.biomassKg / num(house.areaM2) : 0;
-      return { ...k, house, farm, densityKgM2: density };
-    });
-  }),
-
-  batchDetail: publicQuery
-    .input(z.object({ id: z.number() }))
-    .query(async ({ input, ctx }) => {
-      const db = getDb();
-      await assertBatchAccess(ctx, input.id);
-      const k = await batchKpis(input.id);
-      if (!k) throw new Error("Rzut nie istnieje");
-      const weighings = await db.select().from(s.weighings)
-        .where(eq(s.weighings.batchId, input.id)).orderBy(s.weighings.dayAge);
-      const selects = await db.select().from(s.selects)
-        .where(eq(s.selects.batchId, input.id)).orderBy(desc(s.selects.createdAt));
-      const mortalities = await db.select().from(s.mortalities)
-        .where(eq(s.mortalities.batchId, input.id)).orderBy(s.mortalities.day);
-      const treatments = await db.select().from(s.treatments)
-        .where(eq(s.treatments.batchId, input.id)).orderBy(desc(s.treatments.startedAt));
-      const vaccinations = await db.select().from(s.vaccinations)
-        .where(eq(s.vaccinations.batchId, input.id)).orderBy(s.vaccinations.day);
-      const [house] = await db.select().from(s.houses).where(eq(s.houses.id, k.batch.houseId));
-      const [farm] = house ? await db.select().from(s.farms).where(eq(s.farms.id, house.farmId)) : [null];
-      return { ...k, weighings, selects, mortalities, treatments, vaccinations, house: house ?? null, farm: farm ?? null };
-    }),
-
-  addWeighing: publicQuery
-    .input(z.object({
-      batchId: z.number(), dayAge: z.number().int().min(1),
-      sampleSize: z.number().int().min(1), avgWeightG: z.number().int().min(10),
-      stdDevG: z.number().int().optional(), minG: z.number().int().optional(),
-      maxG: z.number().int().optional(), operator: z.string().optional(),
-    }))
-    .mutation(async ({ input }) => {
-      const db = getDb();
-      const sd = input.stdDevG ?? Math.round(input.avgWeightG * 0.1);
-      const cv = (sd / input.avgWeightG) * 100;
-      const [{ id }] = await db.insert(s.weighings).values({
-        batchId: input.batchId, weighedAt: new Date(), dayAge: input.dayAge,
-        sampleSize: input.sampleSize, avgWeightG: input.avgWeightG,
-        medianG: input.avgWeightG, stdDevG: sd,
-        minG: input.minG ?? input.avgWeightG - 2 * sd,
-        maxG: input.maxG ?? input.avgWeightG + 2 * sd,
-        cv: cv.toFixed(2), operator: input.operator ?? "system",
-      }).$returningId();
-      // Event Engine: ważenie uruchamia Dynamic Select Engine
-      await generateDynamicSelects(input.batchId, input.avgWeightG);
-      return { id, cv };
-    }),
-
-  addSelect: publicQuery
-    .input(z.object({
-      batchId: z.number(), name: z.string().min(1), criteria: z.string(),
-      birdCount: z.number().int().min(1), avgWeightG: z.number().int().min(10),
-    }))
-    .mutation(async ({ input }) => {
-      const [{ id }] = await getDb().insert(s.selects).values({
-        batchId: input.batchId, name: input.name, criteria: input.criteria,
-        origin: "manual", birdCount: input.birdCount, avgWeightG: input.avgWeightG,
-        status: "ok",
-      }).$returningId();
-      return { id };
-    }),
-
-  regenerateSelects: publicQuery
-    .input(z.object({ batchId: z.number() }))
-    .mutation(async ({ input }) => {
-      const db = getDb();
-      const [lastW] = await db.select().from(s.weighings)
-        .where(eq(s.weighings.batchId, input.batchId))
-        .orderBy(desc(s.weighings.dayAge)).limit(1);
-      if (!lastW) throw new Error("Brak ważeń dla rzutu");
-      await generateDynamicSelects(input.batchId, lastW.avgWeightG);
-      return { ok: true };
-    }),
-});
-
 async function generateDynamicSelects(batchId: number, avgWeightG: number) {
   const db = getDb();
   const [b] = await db.select().from(s.batches).where(eq(s.batches.id, batchId));
   if (!b || b.currentCount <= 0) return;
   await db.delete(s.selects).where(and(eq(s.selects.batchId, batchId), eq(s.selects.origin, "dynamic")));
-  // rozkład normalny: < -1SD: ~16%, norma: ~68%, > +1SD: ~16%
   const [lastW] = await db.select().from(s.weighings)
     .where(eq(s.weighings.batchId, batchId)).orderBy(desc(s.weighings.dayAge)).limit(1);
   const sd = num(lastW?.stdDevG) || avgWeightG * 0.1;
@@ -238,7 +231,7 @@ const feedRouter = createRouter({
     return getDb().select().from(s.feedIngredients).orderBy(s.feedIngredients.name);
   }),
 
-  recipes: publicQuery.query(async ({ ctx }) => {
+  recipes: protectedQuery.query(async ({ ctx }) => {
     const db = getDb();
     const recs = await db.select().from(s.recipes)
       .where(ctx.companyId
@@ -254,7 +247,7 @@ const feedRouter = createRouter({
     }));
   }),
 
-  optimize: publicQuery
+  optimize: protectedQuery
     .input(z.object({
       proteinMin: z.number().min(10).max(32),
       energyMin: z.number().int().min(2500).max(3400),
@@ -287,9 +280,7 @@ const feedRouter = createRouter({
         for (const p of proteins) {
           for (const fat of fats.length ? fats : [null]) {
             for (let fatPct = 0; fatPct <= 8; fatPct += 1) {
-              // rozwiąż układ: gPct + pPct = available; białko i energia
-              const available = 100 - fixedPct - fatPct - 0.7; // 0.7% syntetyczne aminokwasy
-              // białko: g*pG + p*pP >= proteinMin*100 / available (w % masy)
+              const available = 100 - fixedPct - fatPct - 0.7;
               const pG = num(g.proteinPct), pP = num(p.proteinPct);
               const eG = num(g.energyKcal), eP = num(p.energyKcal);
               let pPct = ((input.proteinMin * 100) / available * available - pG * available) / (pP - pG);
@@ -346,7 +337,7 @@ const feedRouter = createRouter({
 /* ================= ZDROWIE ================= */
 
 const healthRouter = createRouter({
-  treatments: publicQuery.query(async () => {
+  treatments: protectedQuery.query(async () => {
     const db = getDb();
     const [rows, batchRows] = await Promise.all([
       db.select().from(s.treatments).orderBy(desc(s.treatments.startedAt)),
@@ -361,7 +352,7 @@ const healthRouter = createRouter({
     });
   }),
 
-  addTreatment: publicQuery
+  addTreatment: protectedQuery
     .input(z.object({
       batchId: z.number(), startedAt: z.string(), product: z.string().min(2),
       activeSubstance: z.string().min(2), dose: z.string().min(1),
@@ -385,7 +376,7 @@ const healthRouter = createRouter({
       return { id };
     }),
 
-  vaccinations: publicQuery.query(async () => {
+  vaccinations: protectedQuery.query(async () => {
     const db = getDb();
     const [rows, batchRows] = await Promise.all([
       db.select().from(s.vaccinations).orderBy(s.vaccinations.day),
@@ -395,7 +386,7 @@ const healthRouter = createRouter({
     return rows.map((v) => ({ ...v, batchCode: codeOf(v.batchId) }));
   }),
 
-  markVaccinationDone: publicQuery
+  markVaccinationDone: protectedQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       await getDb().update(s.vaccinations).set({ done: true }).where(eq(s.vaccinations.id, input.id));
@@ -406,7 +397,7 @@ const healthRouter = createRouter({
 /* ================= EKONOMIA ================= */
 
 const economicsRouter = createRouter({
-  batchPnl: publicQuery.query(async ({ ctx }) => {
+  batchPnl: protectedQuery.query(async ({ ctx }) => {
     const db = getDb();
     const ids = await scopedBatchIds(ctx);
     if (ids.length === 0) return [];
@@ -441,7 +432,11 @@ const economicsRouter = createRouter({
 /* ================= DASHBOARD ================= */
 
 const dashboardRouter = createRouter({
-  kpis: publicQuery.query(async ({ ctx }) => {
+  kpis: protectedQuery.query(async ({ ctx }) => {
+    if (!ctx.companyId) return {
+      activeBirds: 0, biomassTons: 0, avgFcr: 0, avgMortality: 0,
+      avgEpef: 0, activeBatches: 0, farmsCount: 0, countriesCount: 0,
+    };
     const db = getDb();
     const ids = await scopedBatchIds(ctx);
     const [batchRows, farms, agg] = await Promise.all([
@@ -477,7 +472,8 @@ const dashboardRouter = createRouter({
     };
   }),
 
-  mapData: publicQuery.query(async ({ ctx }) => {
+  mapData: protectedQuery.query(async ({ ctx }) => {
+    if (!ctx.companyId) return [];
     const db = getDb();
     const [farms, houseRows, batchRows, agg] = await Promise.all([
       db.select().from(s.farms).where(and(ne(s.farms.status, "archived"),
@@ -498,7 +494,8 @@ const dashboardRouter = createRouter({
     });
   }),
 
-  alerts: publicQuery.query(async ({ ctx }) => {
+  alerts: protectedQuery.query(async ({ ctx }) => {
+    if (!ctx.companyId) return [];
     const db = getDb();
     const ids = await scopedBatchIds(ctx);
     if (ids.length === 0) return [];
@@ -513,17 +510,17 @@ const dashboardRouter = createRouter({
       alerts.push({
         type: "critical",
         title: `${sel.name} (${codeOf(sel.batchId)})`,
-        detail: `Śr. masa ${(sel.avgWeightG / 1000).toFixed(2)} kg — ${sel.criteria}. Wymaga analizy środowiska i żywienia.`,
+        detail: sel.criteria,
       });
     }
-    for (const t of treats) {
-      const end = new Date(t.startedAt); end.setDate(end.getDate() + t.withdrawalDays);
-      const left = Math.ceil((end.getTime() - Date.now()) / 86400000);
-      if (left > 0) {
+    for (const t of treats.slice(0, 3)) {
+      const end = new Date(t.startedAt);
+      end.setDate(end.getDate() + t.withdrawalDays);
+      if (end > new Date()) {
         alerts.push({
           type: "warning",
-          title: `Karencja: ${t.product} (${codeOf(t.batchId)})`,
-          detail: `${t.activeSubstance} — do końca karencji ${left} dni. Ubój zablokowany do ${end.toISOString().slice(0, 10)}.`,
+          title: `Leczenie w toku: ${t.product}`,
+          detail: `Rzut ${codeOf(t.batchId)} — okres karencji do ${end.toLocaleDateString("pl-PL")}`,
         });
       }
     }
@@ -539,3 +536,4 @@ export const farmRouter = createRouter({
   economics: economicsRouter,
   dashboard: dashboardRouter,
 });
+
