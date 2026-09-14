@@ -110,7 +110,7 @@ export const authRouter = createRouter({
 
   login: anonymousQuery
     .input(z.object({ email: z.string().email(), password: z.string() }))
-    .query(async ({ input }) => {
+    .mutation(async ({ input }) => {
       const db = getDb();
       const [user] = await db.select().from(s.users).where(eq(s.users.email, input.email)).limit(1);
       if (!user) throw new Error("Użytkownik nie znaleziony");
