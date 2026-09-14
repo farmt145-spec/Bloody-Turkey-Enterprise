@@ -10,8 +10,15 @@ export default function Login() {
   const { login } = useAuth();
   const [form, setForm] = useState({ email: "", password: "" });
 
-  const loginMutation = trpc.auth.login.useQuery(form, {
-    enabled: false,
+  const loginMutation = trpc.auth.login.useMutation({
+    onSuccess: (data) => {
+      login(data);
+      toast.success("Zalogowano!");
+      setTimeout(() => nav("/wybierz-gospodarstwo"), 500);
+    },
+    onError: (err) => {
+      toast.error(err.message || "Błąd przy logowaniu");
+    },
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -22,14 +29,11 @@ export default function Login() {
     }
     
     try {
-      const result = await loginMutation.refetch();
-      if (result.data) {
-        login(result.data);
-        toast.success("Zalogowano!");
-        setTimeout(() => nav("/wybierz-gospodarstwo"), 500);
+      await loginMutation.mutateAsync(form);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        toast.error(err.message || "Błąd przy logowaniu");
       }
-    } catch (err: any) {
-      toast.error(err.message || "Błąd przy logowaniu");
     }
   };
 
@@ -110,4 +114,3 @@ export default function Login() {
     </div>
   );
 }
-

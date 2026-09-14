@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { parseAllowedOrigins } from "./cors";
 
 function required(name: string): string {
   const value = process.env[name];
@@ -26,4 +27,5 @@ export const env = {
   kimiOpenUrl: optional("KIMI_OPEN_URL"),
   ownerUnionId: process.env.OWNER_UNION_ID ?? "",
   uploadDir: process.env.UPLOAD_DIR ?? "/mnt/agents/output/uploads",
+  corsOrigins: parseAllowedOrigins(process.env.CORS_ORIGIN),
 };
