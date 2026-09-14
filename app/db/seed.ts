@@ -90,7 +90,7 @@ export async function seed() {
   const companyIds: number[] = [];
   for (const c of COMPANIES) {
     const [{ id }] = await db.insert(schema.companies)
-      .values({ name: c.name, countryCode: c.cc, baseCurrency: "EUR" }).$returningId();
+      .values({ name: c.name, countryCode: c.cc, baseCurrency: "EUR", isDemo: COMPANIES.indexOf(c) === 1 }).$returningId();
     companyIds.push(id);
     await db.insert(schema.auditLog).values({ tableName: "companies", recordId: id, action: "create", newValues: { name: c.name }, author: "seed" });
   }
