@@ -3,7 +3,7 @@
 # Backend wystaw osobno (Railway/Render) i ustaw jego adres w zmiennej VITE_API_URL.
 
 [build]
-  command = "npm install --legacy-peer-deps && npx vite build"
+  command = "npm ci && npm run build:client"
   publish = "dist/public"
 
 [build.environment]
