@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
+import { clearWorkspace } from "@/lib/workspace";
 
 export interface AuthUser {
   userId: number;
@@ -33,6 +34,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(parsed);
       } catch (err) {
         localStorage.removeItem("auth-session");
+        clearWorkspace();
       }
     }
     setIsLoading(false);
@@ -46,6 +48,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = () => {
     setUser(null);
     localStorage.removeItem("auth-session");
+    clearWorkspace();
   };
 
   return (
@@ -60,4 +63,3 @@ export function useAuth() {
   if (!ctx) throw new Error("useAuth must be used within AuthProvider");
   return ctx;
 }
-

@@ -15,8 +15,9 @@ export const authRouter = createRouter({
     }))
     .mutation(async ({ input }) => {
       const db = getDb();
+      const email = input.email.trim().toLowerCase();
       
-      const [existing] = await db.select().from(s.users).where(eq(s.users.email, input.email)).limit(1);
+      const [existing] = await db.select().from(s.users).where(eq(s.users.email, email)).limit(1);
       if (existing) throw new Error("Email już zarejestrowany");
       
       const companyResult = await db.insert(s.companies).values({
@@ -40,9 +41,9 @@ export const authRouter = createRouter({
       
       const userResult = await db.insert(s.users).values({
         companyId: BigInt(companyId),
-        unionId: input.email.toLowerCase(),
-        email: input.email,
-        name: input.email.split("@")[0],
+        unionId: email,
+        email,
+        name: email.split("@")[0],
         userRole: "admin",
         role: "admin",
         password: passwordHash,
@@ -105,27 +106,46 @@ export const authRouter = createRouter({
       
       const token = generateToken(Number(userId), Number(companyId));
       
-      return { companyId, farmId, userId, email: input.email, token, message: "✓ Konto założone" };
+      return {
+        companyId: Number(companyId),
+        farmId: Number(farmId),
+        userId: Number(userId),
+        email,
+        name: email.split("@")[0],
+        userRole: "admin" as const,
+        token,
+        message: "✓ Konto założone",
+      };
     }),
 
   login: anonymousQuery
     .input(z.object({ email: z.string().email(), password: z.string() }))
     .mutation(async ({ input }) => {
       const db = getDb();
-      const [user] = await db.select().from(s.users).where(eq(s.users.email, input.email)).limit(1);
+      const email = input.email.trim().toLowerCase();
+      const [user] = await db.select().from(s.users).where(eq(s.users.email, email)).limit(1);
       if (!user) throw new Error("Użytkownik nie znaleziony");
       const passwordValid = await verifyPassword(input.password, user.password || "");
       if (!passwordValid) throw new Error("Hasło niepoprawne");
       const token = generateToken(Number(user.id), Number(user.companyId));
       const [farm] = await db.select().from(s.farms).where(eq(s.farms.companyId, user.companyId)).limit(1);
-      return { userId: user.id, companyId: user.companyId, farmId: farm?.id || null, email: user.email, name: user.name, userRole: user.userRole, token };
+      await db.update(s.users).set({ lastSignInAt: new Date() }).where(eq(s.users.id, user.id));
+      return {
+        userId: Number(user.id),
+        companyId: Number(user.companyId),
+        farmId: farm?.id ? Number(farm.id) : null,
+        email: user.email ?? email,
+        name: user.name ?? email.split("@")[0],
+        userRole: user.userRole,
+        token,
+      };
     }),
 
   checkEmail: anonymousQuery
     .input(z.object({ email: z.string().email() }))
     .query(async ({ input }) => {
       const db = getDb();
-      const [user] = await db.select().from(s.users).where(eq(s.users.email, input.email)).limit(1);
+      const [user] = await db.select().from(s.users).where(eq(s.users.email, input.email.trim().toLowerCase())).limit(1);
       return { exists: !!user };
     }),
 });
