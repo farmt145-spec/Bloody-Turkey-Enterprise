@@ -1,14 +1,30 @@
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
+import { cors } from "hono/cors";
 import type { HttpBindings } from "@hono/node-server";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { appRouter } from "./router";
 import { createContext } from "./context";
+import { resolveCorsOrigin } from "./lib/cors";
 import { env } from "./lib/env";
 
 const app = new Hono<{ Bindings: HttpBindings }>();
 
 app.use(bodyLimit({ maxSize: 50 * 1024 * 1024 }));
+app.use("/api/*", cors({
+  origin(origin) {
+    return resolveCorsOrigin(origin, env.corsOrigins, env.isProduction) ?? undefined;
+  },
+  allowMethods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowHeaders: [
+    "Content-Type",
+    "Authorization",
+    "X-API-Key",
+    "X-Company-Id",
+    "X-Farm-Id",
+  ],
+  credentials: true,
+}));
 
 /* Upload plików (multipart) — zapis do /mnt/agents/output/uploads */
 app.post("/api/upload", async (c) => {

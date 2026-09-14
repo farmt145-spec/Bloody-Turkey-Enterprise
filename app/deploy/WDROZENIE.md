@@ -19,6 +19,7 @@ Kompletna instrukcja publikacji pełnej wersji (frontend + API + MySQL).
 | `JWT_SECRET` | ✅ | dowolny długi losowy ciąg (Render wygeneruje sam) |
 | `SEED_DEMO` | — | `true` przy pierwszym starze = dane demonstracyjne; potem zmień na `false` |
 | `UPLOAD_DIR` | — | domyślnie `/data/uploads` (Render) — katalog na wgrywane pliki |
+| `CORS_ORIGIN` | — | dokładny adres frontendu na Netlify, np. `https://twoj-site.netlify.app` |
 | `PORT` | — | platforma ustawia sama |
 
 Zmienne `APP_ID` / `KIMI_AUTH_URL` itd. są **opcjonalne** — bez nich działa cały system poza logowaniem Kimi OAuth.
@@ -36,15 +37,17 @@ Zmienne `APP_ID` / `KIMI_AUTH_URL` itd. są **opcjonalne** — bez nich działa 
    - `SEED_DEMO=true`.
 5. Plik `railway.toml` w repo zadba o build z Dockerfile, healthcheck i restart policy.
 6. Po deployu Railway da Ci publiczny adres `https://xxx.up.railway.app` (Settings → Networking → Generate Domain).
-7. **Po pierwszym udanym starcie** zmień `SEED_DEMO=false` i zrób redeploy — inaczej seed będzie próbował się ładować przy każdym restarcie (skrypty są odporne, ale start trwa dłużej).
+7. Jeśli frontend działa na Netlify, ustaw dodatkowo `CORS_ORIGIN=https://twoj-site.netlify.app` i zrób redeploy backendu.
+8. **Po pierwszym udanym starcie** zmień `SEED_DEMO=false` i zrób redeploy — inaczej seed będzie próbował się ładować przy każdym restarcie (skrypty są odporne, ale start trwa dłużej).
 
 ## Opcja B — Render
 
 1. Utwórz bazę MySQL poza Renderem (PlanetScale/Aiven) i skopiuj connection string.
 2. Na render.com: **New → Blueprint** i wskaż repo — Render odczyta `render.yaml` i utworzy usługę z dyskiem na uploady.
 3. W panelu usługi uzupełnij tylko `DATABASE_URL` (reszta jest w `render.yaml`).
-4. Adres publiczny: `https://bloody-turkey.onrender.com`.
-5. Uwaga: darmowy plan Render „usypia" po bezczynności — pierwsze wejście może potrwać ~30 s.
+4. Jeśli frontend działa na Netlify, ustaw `CORS_ORIGIN=https://twoj-site.netlify.app`.
+5. Adres publiczny: `https://bloody-turkey.onrender.com`.
+6. Uwaga: darmowy plan Render „usypia" po bezczynności — pierwsze wejście może potrwać ~30 s.
 
 ---
 
